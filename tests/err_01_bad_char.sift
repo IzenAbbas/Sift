@@ -1,0 +1,4 @@
+process main gives val
+begin
+  declare x: val = 3 @ 4;
+end
