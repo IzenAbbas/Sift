@@ -1,0 +1,11 @@
+# Build outputs
+/sift
+/build/
+*.o
+*.ll
+# Compiled Sift programs (examples, tests, demos)
+/examples/*
+!/examples/*.sift
+/a.out
+# Milestone snapshots are not part of the submission
+/snapshots/
