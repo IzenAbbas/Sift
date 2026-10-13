@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "util.h"
+#include "ast.h"
 #include "lexer.h"
 #include "parser.h"
 
@@ -58,10 +59,17 @@ int main(int argc, char **argv)
     if (strcmp(cmd, "tokens") == 0)
         return cmd_tokens();
 
-    if (strcmp(cmd, "run") == 0 || strcmp(cmd, "ast") == 0 || strcmp(cmd, "compile") == 0) {
-        /* Not built yet: at least scan the file so lexical errors show up. */
-        while (yylex() != 0)
-            ;
+    /* Every other command needs the parsed program. A syntax error
+     * stops inside yyparse (see yyerror in parser.y). */
+    if (yyparse() != 0)
+        return 1;
+    fclose(yyin);
+
+    if (strcmp(cmd, "ast") == 0) {
+        ast_print(g_program);
+        return 0;
+    }
+    if (strcmp(cmd, "run") == 0 || strcmp(cmd, "compile") == 0) {
         fprintf(stderr, "sift: '%s' is not implemented yet\n", cmd);
         return 1;
     }
