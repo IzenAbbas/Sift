@@ -1,0 +1,11 @@
+process main gives val
+begin
+  check yes
+  begin
+    show 1;
+  end
+  else
+  begin
+    show 2;
+  end
+end

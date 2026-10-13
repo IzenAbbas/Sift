@@ -1,0 +1,5 @@
+process main gives val
+begin
+  declare d: buffer = [1, 2];
+  show count d[0];
+end
