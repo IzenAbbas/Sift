@@ -1,0 +1,15 @@
+-- Checks operator precedence and the pipeline desugaring.
+process main gives val
+begin
+  show 1 + 2 * 3 - 4 / 2 % 3;
+  show -2 * 3;
+  show not a = b and c or d;
+  show x within lo + 1..hi * 2;
+  show y + 1 is void;
+  show count data + count(f(1)) - count g();
+  show a |> f |> g(5);
+  show a + 1 |> f(b |> h);
+  show x > 1 |> f;
+  show (1 + 2) * 3;
+  give back 0;
+end

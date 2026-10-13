@@ -1,0 +1,41 @@
+-- One of every kind of statement.
+process helper using a: val, b: flag, d: buffer
+begin
+  give back;
+end
+
+process main gives val
+begin
+  declare x: val;
+  declare f: flag = yes;
+  declare d: buffer[3] = [1, void, 3];
+  declare e: buffer = [4, 5];
+  set x = 10;
+  set d[0] = x;
+  check x < 5
+  begin
+    show 1;
+  end
+  else check x < 20
+  begin
+    show 2;
+  end
+  otherwise
+  begin
+    show 3;
+  end
+  repeat while f
+  begin
+    stop;
+  end
+  repeat i from 0 below 3
+  begin
+    skip;
+  end
+  sweep v in d
+  begin
+    show v;
+  end
+  helper(x, f, d);
+  give back x;
+end

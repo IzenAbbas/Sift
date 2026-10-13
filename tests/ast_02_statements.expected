@@ -1,0 +1,64 @@
+program
+  process helper using a: val, b: flag, d: buffer  (line 2)
+    block
+      give back  (line 4)
+  process main gives val  (line 7)
+    block
+      declare x: val  (line 9)
+      declare f: flag  (line 10)
+        flag yes
+      declare d: buffer[3]  (line 11)
+        list
+          int 1
+          void
+          int 3
+      declare e: buffer  (line 12)
+        list
+          int 4
+          int 5
+      set x  (line 13)
+        int 10
+      set d[...]  (line 14)
+        index
+          int 0
+        var x
+      check  (line 15)
+        if
+          binary <
+            var x
+            int 5
+          block
+            show  (line 17)
+              int 1
+        else if
+          binary <
+            var x
+            int 20
+          block
+            show  (line 21)
+              int 2
+        otherwise
+          block
+            show  (line 25)
+              int 3
+      repeat while  (line 27)
+        var f
+        block
+          stop  (line 29)
+      repeat i from/below  (line 31)
+        int 0
+        int 3
+        block
+          skip  (line 33)
+      sweep v in  (line 35)
+        var d
+        block
+          show  (line 37)
+            var v
+      call statement  (line 39)
+        call helper
+          var x
+          var f
+          var d
+      give back  (line 40)
+        var x
