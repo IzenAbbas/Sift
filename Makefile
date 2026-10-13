@@ -13,7 +13,7 @@ BISON   ?= bison
 BUILD = build
 
 # Hand-written C files (in src/) and the two generated ones (in build/).
-SRCS = main.c util.c
+SRCS = main.c util.c ast.c
 OBJS = $(addprefix $(BUILD)/,$(SRCS:.c=.o)) $(BUILD)/parser.o $(BUILD)/lexer.o
 
 .PHONY: all test clean
