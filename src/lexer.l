@@ -14,6 +14,10 @@
 #include "util.h"
 #include "lexer.h"
 #include "parser.h"
+
+/* Runs before every rule: record the token's line for the parser
+ * (Bison's @1, @2 ... locations). */
+#define YY_USER_ACTION  yylloc.first_line = yylloc.last_line = yylineno;
 %}
 
 DIGIT   [0-9]
