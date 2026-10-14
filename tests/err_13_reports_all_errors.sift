@@ -1,0 +1,8 @@
+-- Sema reports every error, not just the first.
+process main gives val
+begin
+  show a;
+  declare f: flag = 3;
+  set f = 4 = yes;
+  give back 0;
+end

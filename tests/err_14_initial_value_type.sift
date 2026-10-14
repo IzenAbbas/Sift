@@ -1,0 +1,6 @@
+process main gives val
+begin
+  declare x: val = 3;
+  declare f: flag = x;
+  give back 0;
+end

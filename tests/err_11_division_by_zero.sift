@@ -1,0 +1,7 @@
+process main gives val
+begin
+  declare x: val = 0;
+  show 1;
+  show 10 / x;
+  give back 0;
+end
