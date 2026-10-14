@@ -11,6 +11,8 @@
 #include <string.h>
 #include "util.h"
 #include "ast.h"
+#include "sema.h"
+#include "interp.h"
 #include "lexer.h"
 #include "parser.h"
 
@@ -69,8 +71,15 @@ int main(int argc, char **argv)
         ast_print(g_program);
         return 0;
     }
-    if (strcmp(cmd, "run") == 0 || strcmp(cmd, "compile") == 0) {
-        fprintf(stderr, "sift: '%s' is not implemented yet\n", cmd);
+
+    /* Semantic errors: all of them have been reported; stop here. */
+    if (sema_check(g_program) > 0)
+        return 1;
+
+    if (strcmp(cmd, "run") == 0)
+        return interp_run(g_program);   /* main's result is the exit code */
+    if (strcmp(cmd, "compile") == 0) {
+        fprintf(stderr, "sift: 'compile' is not implemented yet\n");
         return 1;
     }
     usage();
