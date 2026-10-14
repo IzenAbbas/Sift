@@ -1,0 +1,25 @@
+-- declare, set, default values and block scopes.
+process main gives val
+begin
+  declare x: val;
+  declare done: flag;
+  show x;
+  show done;
+  set x = 5;
+  set x = x * x + 1;
+  set done = x > 20;
+  show x;
+  show done;
+  check done
+  begin
+    -- shadows the outer x inside this block only
+    declare x: val = 100;
+    declare y: val = x + 1;
+    show y;
+    set x = 1;
+  end
+  show x;
+  declare z: val = x - 30;
+  show z;
+  give back 0;
+end

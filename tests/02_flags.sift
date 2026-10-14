@@ -1,0 +1,23 @@
+-- flag values, comparisons and logical operators.
+process main gives val
+begin
+  declare a: flag = yes;
+  declare b: flag;
+  show a;
+  show b;
+  show a and b;
+  show a or b;
+  show not a;
+  show not a or b;
+  show a = b;
+  show a != b;
+  show 3 < 4;
+  show 3 <= 3;
+  show 3 > 4;
+  show 4 >= 5;
+  show 5 = 5;
+  show 5 != 5;
+  show 1 + 1 = 2 and 2 * 2 = 4;
+  show not 1 > 2;
+  give back 0;
+end

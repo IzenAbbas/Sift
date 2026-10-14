@@ -1,0 +1,51 @@
+-- check / else check / otherwise.
+process main gives val
+begin
+  declare score: val = 73;
+  check score >= 90
+  begin
+    show 4;
+  end
+  else check score >= 80
+  begin
+    show 3;
+  end
+  else check score >= 70
+  begin
+    show 2;
+  end
+  otherwise
+  begin
+    show 0;
+  end
+
+  -- no branch taken, no otherwise
+  check score < 0
+  begin
+    show -1;
+  end
+
+  -- only the first true branch runs
+  check score > 10
+  begin
+    show 10;
+  end
+  else check score > 20
+  begin
+    show 20;
+  end
+
+  -- nested checks
+  check score > 50
+  begin
+    check score % 2 = 1
+    begin
+      show 1;
+    end
+    otherwise
+    begin
+      show 0;
+    end
+  end
+  give back 0;
+end

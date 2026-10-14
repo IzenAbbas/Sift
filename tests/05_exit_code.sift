@@ -1,0 +1,7 @@
+-- The value given back by main is the exit code.
+process main gives val
+begin
+  show 1;
+  give back 6 * 7;
+  show 2;
+end

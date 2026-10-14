@@ -1,0 +1,19 @@
+-- Arithmetic on val: precedence, unary minus, truncating division.
+process main gives val
+begin
+  show 1 + 2 * 3;
+  show (1 + 2) * 3;
+  show 10 - 4 - 3;
+  show -7;
+  show - 7 + 10;
+  show 17 / 5;
+  show -17 / 5;
+  show 17 % 5;
+  show -17 % 5;
+  show 17 % -5;
+  show 100 / 7 * 7 + 100 % 7;
+  -- overflow wraps around like a 32-bit int
+  show 2147483647 + 1 + 1;
+  show 65536 * 65536;
+  give back 0;
+end
