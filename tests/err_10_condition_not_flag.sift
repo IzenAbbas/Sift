@@ -1,0 +1,9 @@
+process main gives val
+begin
+  declare x: val = 1;
+  check x
+  begin
+    show x;
+  end
+  give back 0;
+end
