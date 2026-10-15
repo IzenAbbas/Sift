@@ -1,0 +1,39 @@
+-- repeat i from a below b.
+process main gives val
+begin
+  repeat i from 0 below 4
+  begin
+    show i;
+  end
+  -- empty range: body never runs
+  repeat i from 5 below 5
+  begin
+    show 999;
+  end
+  -- negative start
+  repeat k from -2 below 1
+  begin
+    show k * 10;
+  end
+  -- the limit is evaluated once, so changing n does not change the loop
+  declare n: val = 3;
+  declare runs: val = 0;
+  repeat i from 0 below n
+  begin
+    set n = n + 1;
+    set runs = runs + 1;
+  end
+  show runs;
+  show n;
+  -- nested loops: multiplication table corner
+  declare total: val = 0;
+  repeat a from 1 below 4
+  begin
+    repeat b from 1 below 4
+    begin
+      set total = total + a * b;
+    end
+  end
+  show total;
+  give back 0;
+end
