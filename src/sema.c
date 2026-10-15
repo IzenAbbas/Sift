@@ -22,6 +22,7 @@ typedef struct Symbol {
     TypeKind type;
     int slot;           /* slot number inside the current process */
     int line;           /* where it was declared */
+    int readonly;       /* loop variables cannot be changed with `set` */
 } Symbol;
 
 typedef struct Scope {
@@ -31,6 +32,7 @@ typedef struct Scope {
 
 static Scope *cur_scope = NULL;      /* innermost open scope */
 static Process *cur_proc = NULL;     /* process being checked */
+static int loop_depth = 0;           /* > 0 while inside a loop body */
 
 static void push_scope(void)
 {
@@ -71,7 +73,7 @@ static Symbol *lookup(const char *name)
 
 /* Declare a new variable in the current scope and give it the next free
  * slot of the current process. Returns the slot number. */
-static int declare(const char *name, TypeKind type, int line)
+static int declare(const char *name, TypeKind type, int line, int readonly)
 {
     Symbol *old = lookup_here(name);
     if (old != NULL)
@@ -81,6 +83,7 @@ static int declare(const char *name, TypeKind type, int line)
     sym->name = xstrdup(name);
     sym->type = type;
     sym->line = line;
+    sym->readonly = readonly;
     sym->slot = cur_proc->nslots++;
     list_push(cur_proc->slot_types, (void *)(intptr_t)type);
     list_push(cur_proc->slot_names, sym->name);
@@ -193,7 +196,7 @@ static void check_declare(Stmt *s)
      * `declare x: val = x + 1;` refers to an outer x. */
     if (s->value != NULL)
         expect_type(s->value, t, "initial value");
-    s->slot = declare(s->name, t, s->line);
+    s->slot = declare(s->name, t, s->line, 0);
 }
 
 static void check_set(Stmt *s)
@@ -205,11 +208,38 @@ static void check_set(Stmt *s)
         return;
     }
     s->slot = sym->slot;
+    if (sym->readonly)
+        report_error(s->line, "cannot set loop variable '%s'", s->name);
     if (s->index != NULL) {
         report_error(s->line, "indexing is not supported yet");
         return;
     }
     expect_type(s->value, sym->type, "assigned value");
+}
+
+/* A loop body is checked with loop_depth raised, so that `stop` and
+ * `skip` inside it are allowed. */
+static void check_loop_body(Block *body)
+{
+    loop_depth++;
+    check_block(body);
+    loop_depth--;
+}
+
+/* repeat i from a below b / sweep x in buf: the loop variable lives in
+ * its own scope around the body, and is read-only. */
+static void check_counted_loop(Stmt *s)
+{
+    if (s->kind == STMT_REPEAT) {
+        expect_type(s->value, TY_VAL, "start of 'repeat'");
+        expect_type(s->limit, TY_VAL, "limit of 'repeat'");
+    } else {
+        expect_type(s->value, TY_BUFFER, "what 'sweep' goes through");
+    }
+    push_scope();
+    s->slot = declare(s->name, TY_VAL, s->line, 1);
+    check_loop_body(s->body);
+    pop_scope();
 }
 
 static void check_stmt(Stmt *s)
@@ -228,6 +258,19 @@ static void check_stmt(Stmt *s)
         }
         if (s->else_block != NULL)
             check_block(s->else_block);
+        break;
+    case STMT_WHILE:
+        expect_type(s->value, TY_FLAG, "condition of 'repeat while'");
+        check_loop_body(s->body);
+        break;
+    case STMT_REPEAT:
+    case STMT_SWEEP:
+        check_counted_loop(s);
+        break;
+    case STMT_STOP:
+    case STMT_SKIP:
+        if (loop_depth == 0)
+            report_error(s->line, "'%s' used outside a loop", s->kind == STMT_STOP ? "stop" : "skip");
         break;
     case STMT_SHOW:
         check_expr(s->value);
