@@ -1,0 +1,52 @@
+-- stop (break) and skip (continue), including in nested loops.
+process main gives val
+begin
+  -- odd numbers below 10, stopping at 7
+  repeat i from 0 below 10
+  begin
+    check i % 2 = 0
+    begin
+      skip;
+    end
+    check i = 7
+    begin
+      stop;
+    end
+    show i;
+  end
+  -- stop only leaves the inner loop
+  repeat a from 0 below 3
+  begin
+    repeat b from 0 below 100
+    begin
+      check b = 2
+      begin
+        stop;
+      end
+      show a * 10 + b;
+    end
+  end
+  -- skip in a while loop
+  declare n: val = 0;
+  repeat while n < 6
+  begin
+    set n = n + 1;
+    check n = 3 or n = 4
+    begin
+      skip;
+    end
+    show n;
+  end
+  -- stop in an endless loop
+  declare c: val = 0;
+  repeat while yes
+  begin
+    set c = c + 1;
+    check c >= 5
+    begin
+      stop;
+    end
+  end
+  show c;
+  give back 0;
+end

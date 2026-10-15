@@ -1,0 +1,21 @@
+-- Loop variables and declarations inside loops.
+process main gives val
+begin
+  declare i: val = 100;
+  repeat i from 0 below 2
+  begin
+    -- this i is the loop variable; it hides the outer i
+    show i;
+    declare inside: val;
+    set inside = inside + 5;
+    -- inside starts again at 0 on every iteration
+    show inside;
+  end
+  show i;
+  -- the same loop variable name can be reused by later loops
+  repeat i from 7 below 8
+  begin
+    show i;
+  end
+  give back 0;
+end
