@@ -1,0 +1,8 @@
+process main gives val
+begin
+  repeat i from 0 below 3
+  begin
+    set i = i + 1;
+  end
+  give back 0;
+end

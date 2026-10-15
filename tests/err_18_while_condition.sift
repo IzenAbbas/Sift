@@ -1,0 +1,9 @@
+process main gives val
+begin
+  declare n: val = 3;
+  repeat while n
+  begin
+    set n = n - 1;
+  end
+  give back 0;
+end
