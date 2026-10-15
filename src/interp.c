@@ -15,9 +15,19 @@
 #include "interp.h"
 #include "sema.h"
 
-/* The value of a val or flag (flag: 0 = no, 1 = yes). */
+/* A buffer value: a pointer to the elements plus the length.
+ * Copying a Buffer copies only these two fields, which is what gives
+ * buffers their reference semantics. */
+typedef struct {
+    int32_t *data;
+    int32_t len;
+} Buffer;
+
+/* The value of a variable or expression. val and flag use `num`
+ * (flag: 0 = no, 1 = yes); buffer uses `buf`. */
 typedef struct {
     int32_t num;
+    Buffer buf;
 } Value;
 
 /* One running process. */
@@ -30,6 +40,8 @@ typedef struct {
 /* What a statement tells the statement that contains it. */
 typedef enum {
     FLOW_NORMAL,         /* carry on with the next statement */
+    FLOW_STOP,           /* `stop`: leave the innermost loop */
+    FLOW_SKIP,           /* `skip`: go to the next iteration */
     FLOW_RETURN          /* `give back` happened: leave the process */
 } Flow;
 
@@ -89,6 +101,8 @@ static Value make_num(int32_t n)
 {
     Value v;
     v.num = n;
+    v.buf.data = NULL;
+    v.buf.len = 0;
     return v;
 }
 
@@ -152,8 +166,26 @@ static void show(Expr *e, Value v)
         printf("%d\n", v.num);
 }
 
+/* Run one iteration's body and decide what the loop does next.
+ * Returns 1 if the loop must end (stop, or give back which is then
+ * passed on through *flow), 0 to carry on. */
+static int run_body(Frame *f, Block *body, Flow *flow)
+{
+    Flow result = exec_block(f, body);
+    if (result == FLOW_STOP) {
+        *flow = FLOW_NORMAL;      /* stop ends this loop only */
+        return 1;
+    }
+    if (result == FLOW_RETURN) {
+        *flow = FLOW_RETURN;
+        return 1;
+    }
+    return 0;                     /* normal end of body, or skip */
+}
+
 static Flow exec_stmt(Frame *f, Stmt *s)
 {
+    Flow flow = FLOW_NORMAL;
     switch (s->kind) {
     case STMT_DECLARE:
         /* no initialiser: val starts at 0, flag at no (also 0) */
@@ -173,6 +205,41 @@ static Flow exec_stmt(Frame *f, Stmt *s)
         if (s->else_block != NULL)
             return exec_block(f, s->else_block);
         return FLOW_NORMAL;
+
+    case STMT_WHILE:
+        while (eval(f, s->value).num)
+            if (run_body(f, s->body, &flow))
+                break;
+        return flow;
+
+    case STMT_REPEAT: {
+        /* start and limit are evaluated once, before the loop */
+        int32_t start = eval(f, s->value).num;
+        int32_t limit = eval(f, s->limit).num;
+        for (int32_t i = start; i < limit; i++) {
+            f->slots[s->slot] = make_num(i);
+            if (run_body(f, s->body, &flow))
+                break;
+        }
+        return flow;
+    }
+
+    case STMT_SWEEP: {
+        /* the buffer (and so its length) is read once, at the start */
+        Buffer b = eval(f, s->value).buf;
+        for (int32_t k = 0; k < b.len; k++) {
+            f->slots[s->slot] = make_num(b.data[k]);   /* a copy of the element */
+            if (run_body(f, s->body, &flow))
+                break;
+        }
+        return flow;
+    }
+
+    case STMT_STOP:
+        return FLOW_STOP;
+
+    case STMT_SKIP:
+        return FLOW_SKIP;
 
     case STMT_SHOW:
         show(s->value, eval(f, s->value));
@@ -194,7 +261,7 @@ static Flow exec_block(Frame *f, Block *b)
     for (int i = 0; i < b->stmts->count; i++) {
         Flow flow = exec_stmt(f, b->stmts->items[i]);
         if (flow != FLOW_NORMAL)
-            return flow;      /* pass give back up to the process */
+            return flow;      /* pass stop/skip/give back up to the enclosing statement */
     }
     return FLOW_NORMAL;
 }
