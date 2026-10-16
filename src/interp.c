@@ -96,6 +96,7 @@ static int32_t do_arith(Expr *e, int32_t a, int32_t b)
 /* ---------- expressions ---------- */
 
 static Value eval(Frame *f, Expr *e);
+static Value call_process(Frame *caller, Expr *call);
 
 static Value make_num(int32_t n)
 {
@@ -148,6 +149,8 @@ static Value eval(Frame *f, Expr *e)
         return make_num(!eval(f, e->left).num);
     case EXPR_BINARY:
         return eval_binary(f, e);
+    case EXPR_CALL:
+        return call_process(f, e);
     default:
         runtime_error(e->line, "internal error: unknown expression");
         return make_num(0);
@@ -245,6 +248,10 @@ static Flow exec_stmt(Frame *f, Stmt *s)
         show(s->value, eval(f, s->value));
         return FLOW_NORMAL;
 
+    case STMT_CALL:
+        call_process(f, s->value);     /* any result is thrown away */
+        return FLOW_NORMAL;
+
     case STMT_GIVE:
         if (s->value != NULL)
             f->result = eval(f, s->value);
@@ -266,14 +273,45 @@ static Flow exec_block(Frame *f, Block *b)
     return FLOW_NORMAL;
 }
 
+/* ---------- processes ---------- */
+
+/* Run a process with already-evaluated arguments and return what it
+ * gives back. Every call gets a fresh frame, so recursion works: each
+ * active call has its own copy of the variables. */
+static Value run_process(Process *p, Value *args)
+{
+    Frame frame;
+    frame.proc = p;
+    frame.slots = xcalloc(p->nslots, sizeof(Value));
+    frame.result = make_num(0);
+
+    /* parameters are slots 0 .. n-1. val and flag are copied (by value);
+     * a buffer copies only its pointer and length (by reference). */
+    for (int i = 0; i < p->params->count; i++)
+        frame.slots[i] = args[i];
+
+    Flow flow = exec_block(&frame, p->body);
+    if (flow != FLOW_RETURN && p->ret.kind != TY_NONE)
+        runtime_error(p->body->end_line, "process '%s' ended without giving back a value", p->name);
+
+    free(frame.slots);
+    return frame.result;
+}
+
+static Value call_process(Frame *caller, Expr *call)
+{
+    int n = call->args->count;
+    Value *args = xcalloc(n, sizeof(Value));
+    for (int i = 0; i < n; i++)            /* arguments left to right */
+        args[i] = eval(caller, call->args->items[i]);
+    Value result = run_process(call->proc, args);
+    free(args);
+    return result;
+}
+
 int interp_run(Program *prog)
 {
-    Process *main_proc = sema_main(prog);
-    Frame frame;
-    frame.proc = main_proc;
-    frame.slots = xcalloc(main_proc->nslots, sizeof(Value));
-    frame.result = make_num(0);
-    exec_block(&frame, main_proc->body);
+    Value result = run_process(sema_main(prog), NULL);
     fflush(stdout);
-    return frame.result.num;
+    return result.num;     /* main's result becomes the exit code */
 }
