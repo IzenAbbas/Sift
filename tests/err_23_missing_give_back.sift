@@ -1,0 +1,12 @@
+process f using a: val gives val
+begin
+  check a > 0
+  begin
+    give back 1;
+  end
+end
+
+process main gives val
+begin
+  give back f(1);
+end

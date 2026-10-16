@@ -1,0 +1,10 @@
+process hello
+begin
+  show 1;
+end
+
+process main gives val
+begin
+  show hello() + 1;
+  give back 0;
+end

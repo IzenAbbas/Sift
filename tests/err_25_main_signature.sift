@@ -1,0 +1,4 @@
+process main using x: val gives val
+begin
+  give back x;
+end

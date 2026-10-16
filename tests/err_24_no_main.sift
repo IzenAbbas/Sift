@@ -1,0 +1,4 @@
+process helper gives val
+begin
+  give back 1;
+end

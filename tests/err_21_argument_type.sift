@@ -1,0 +1,10 @@
+process f using a: val, b: flag gives val
+begin
+  give back a;
+end
+
+process main gives val
+begin
+  show f(1, 2);
+  give back 0;
+end
