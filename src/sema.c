@@ -30,6 +30,7 @@ typedef struct Scope {
     struct Scope *parent;   /* enclosing scope, NULL for the outermost */
 } Scope;
 
+static Program *cur_prog = NULL;     /* the whole program (to find processes) */
 static Scope *cur_scope = NULL;      /* innermost open scope */
 static Process *cur_proc = NULL;     /* process being checked */
 static int loop_depth = 0;           /* > 0 while inside a loop body */
@@ -138,6 +139,51 @@ static TypeKind check_binary(Expr *e)
     return TY_ERROR;
 }
 
+/* Find a process by name, or NULL. Processes have their own namespace,
+ * separate from variables. */
+static Process *find_process(const char *name)
+{
+    for (int i = 0; i < cur_prog->procs->count; i++) {
+        Process *p = cur_prog->procs->items[i];
+        if (strcmp(p->name, name) == 0)
+            return p;
+    }
+    return NULL;
+}
+
+/* Check a call f(a, b, ...): the process must exist and the arguments
+ * must match its parameters in number and type. Returns the type the
+ * call gives back (TY_NONE for a process without `gives`). */
+static TypeKind check_call(Expr *e)
+{
+    Process *p = find_process(e->name);
+    if (p == NULL) {
+        report_error(e->line, "there is no process called '%s'", e->name);
+        for (int i = 0; i < e->args->count; i++)
+            check_expr(e->args->items[i]);
+        return TY_ERROR;
+    }
+    e->proc = p;
+
+    if (e->args->count != p->params->count)
+        report_error(e->line, "process '%s' takes %d argument%s, but %d %s given",
+                     p->name, p->params->count, p->params->count == 1 ? "" : "s",
+                     e->args->count, e->args->count == 1 ? "was" : "were");
+
+    for (int i = 0; i < e->args->count; i++) {
+        Expr *arg = e->args->items[i];
+        TypeKind got = check_expr(arg);
+        if (i < p->params->count) {
+            Param *param = p->params->items[i];
+            if (got != param->type.kind && got != TY_ERROR)
+                report_error(arg->line, "argument %d of '%s' ('%s') must be %s, not %s",
+                             i + 1, p->name, param->name,
+                             type_name(param->type.kind), type_name(got));
+        }
+    }
+    return p->ret.kind;
+}
+
 /* Work out (and record in e->type) the type of an expression. */
 static TypeKind check_expr(Expr *e)
 {
@@ -170,6 +216,14 @@ static TypeKind check_expr(Expr *e)
         break;
     case EXPR_BINARY:
         t = check_binary(e);
+        break;
+    case EXPR_CALL:
+        t = check_call(e);
+        if (t == TY_NONE) {
+            report_error(e->line, "process '%s' does not give back a value, "
+                         "so it cannot be used in an expression", e->name);
+            t = TY_ERROR;
+        }
         break;
     default:
         report_error(e->line, "this kind of expression is not supported yet");
@@ -276,8 +330,22 @@ static void check_stmt(Stmt *s)
         check_expr(s->value);
         break;
     case STMT_GIVE:
-        if (s->value != NULL)
+        if (cur_proc->ret.kind == TY_NONE) {
+            if (s->value != NULL) {
+                report_error(s->line, "process '%s' has no 'gives' type, so it cannot give back a value",
+                             cur_proc->name);
+                check_expr(s->value);
+            }
+        } else if (s->value == NULL) {
+            report_error(s->line, "process '%s' must give back a %s",
+                         cur_proc->name, type_name(cur_proc->ret.kind));
+        } else {
             expect_type(s->value, cur_proc->ret.kind, "value given back");
+        }
+        break;
+    case STMT_CALL:
+        /* as a statement any process may be called; a result is discarded */
+        s->value->type = check_call(s->value);
         break;
     default:
         report_error(s->line, "this kind of statement is not supported yet");
@@ -296,6 +364,55 @@ static void check_block(Block *b)
 
 /* ---------- processes ---------- */
 
+/* Does this block always end with `give back`? Conservative check from
+ * CLAUDE.md: the last statement must be a give back, or a check that has
+ * an otherwise and in which every branch ends with give back. */
+static int ends_with_give(Block *b)
+{
+    if (b->stmts->count == 0)
+        return 0;
+    Stmt *last = b->stmts->items[b->stmts->count - 1];
+    if (last->kind == STMT_GIVE)
+        return 1;
+    if (last->kind == STMT_CHECK && last->else_block != NULL) {
+        for (int i = 0; i < last->blocks->count; i++)
+            if (!ends_with_give(last->blocks->items[i]))
+                return 0;
+        return ends_with_give(last->else_block);
+    }
+    return 0;
+}
+
+/* A type written after `gives` or on a parameter cannot have a size. */
+static void check_no_size(Type t, int line, const char *where)
+{
+    if (t.kind == TY_BUFFER && t.size >= 0)
+        report_error(line, "a buffer %s cannot have a size", where);
+}
+
+static void check_process(Process *p)
+{
+    cur_proc = p;
+    loop_depth = 0;
+
+    /* Parameters and the top level of the body share one scope, so a
+     * body cannot redeclare a parameter's name. Parameters get slots
+     * 0, 1, 2, ... in order. */
+    push_scope();
+    for (int i = 0; i < p->params->count; i++) {
+        Param *param = p->params->items[i];
+        check_no_size(param->type, param->line, "parameter");
+        declare(param->name, param->type.kind, param->line, 0);
+    }
+    for (int i = 0; i < p->body->stmts->count; i++)
+        check_stmt(p->body->stmts->items[i]);
+    pop_scope();
+
+    if (p->ret.kind != TY_NONE && !ends_with_give(p->body))
+        report_error(p->body->end_line, "process '%s' must end with 'give back' "
+                     "(it gives %s)", p->name, type_name(p->ret.kind));
+}
+
 Process *sema_main(Program *prog)
 {
     for (int i = 0; i < prog->procs->count; i++) {
@@ -309,14 +426,33 @@ Process *sema_main(Program *prog)
 int sema_check(Program *prog)
 {
     int errors_before = g_error_count;
+    cur_prog = prog;
 
+    /* Pass 1: every process's signature is known from the start, so a
+     * process may be called before (above) its definition. Here we only
+     * check the signatures themselves. */
     for (int i = 0; i < prog->procs->count; i++) {
-        cur_proc = prog->procs->items[i];
-        check_block(cur_proc->body);
+        Process *p = prog->procs->items[i];
+        for (int j = 0; j < i; j++) {
+            Process *q = prog->procs->items[j];
+            if (strcmp(p->name, q->name) == 0) {
+                report_error(p->line, "process '%s' is already defined (at line %d)", p->name, q->line);
+                break;
+            }
+        }
+        check_no_size(p->ret, p->line, "'gives' type");
     }
 
-    if (sema_main(prog) == NULL)
+    Process *main_proc = sema_main(prog);
+    if (main_proc == NULL)
         report_error(1, "the program has no 'main' process");
+    else if (main_proc->params->count != 0 || main_proc->ret.kind != TY_VAL)
+        report_error(main_proc->line, "'main' must have no parameters and give val "
+                     "(process main gives val)");
+
+    /* Pass 2: check every process body. */
+    for (int i = 0; i < prog->procs->count; i++)
+        check_process(prog->procs->items[i]);
 
     return g_error_count - errors_before;
 }
