@@ -1,0 +1,5 @@
+-- Exit codes are 0..255 on Linux, so 300 becomes 300 % 256 = 44.
+process main gives val
+begin
+  give back 300;
+end

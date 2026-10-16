@@ -1,7 +1,12 @@
 -- The value given back by main is the exit code.
+-- An early give back leaves main straight away.
 process main gives val
 begin
   show 1;
-  give back 6 * 7;
+  check yes
+  begin
+    give back 6 * 7;
+  end
   show 2;
+  give back 0;
 end

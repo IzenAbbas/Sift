@@ -1,0 +1,42 @@
+-- give back from inside loops leaves the whole process.
+process first_multiple using n: val, limit: val gives val
+begin
+  repeat i from 1 below limit
+  begin
+    repeat while yes
+    begin
+      check i % n = 0
+      begin
+        give back i;
+      end
+      stop;
+    end
+  end
+  give back -1;
+end
+
+process sign using x: val gives val
+begin
+  check x > 0
+  begin
+    give back 1;
+  end
+  else check x < 0
+  begin
+    give back -1;
+  end
+  otherwise
+  begin
+    give back 0;
+  end
+end
+
+process main gives val
+begin
+  show first_multiple(7, 100);
+  show first_multiple(7, 5);
+  show sign(-20);
+  show sign(0);
+  show sign(3);
+  give back 0;
+end
