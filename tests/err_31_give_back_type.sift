@@ -1,0 +1,9 @@
+process f gives flag
+begin
+  give back 1;
+end
+
+process main gives val
+begin
+  give back 0;
+end

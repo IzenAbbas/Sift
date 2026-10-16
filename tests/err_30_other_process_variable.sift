@@ -1,0 +1,10 @@
+process f gives val
+begin
+  give back secret;
+end
+
+process main gives val
+begin
+  declare secret: val = 1;
+  give back f();
+end

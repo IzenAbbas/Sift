@@ -1,0 +1,10 @@
+process f
+begin
+  give back 3;
+end
+
+process main gives val
+begin
+  f();
+  give back 0;
+end

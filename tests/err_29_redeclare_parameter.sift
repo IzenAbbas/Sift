@@ -1,0 +1,10 @@
+process f using n: val gives val
+begin
+  declare n: val = 2;
+  give back n;
+end
+
+process main gives val
+begin
+  give back f(1);
+end

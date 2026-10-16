@@ -1,0 +1,14 @@
+process f gives val
+begin
+  give back 1;
+end
+
+process f gives val
+begin
+  give back 2;
+end
+
+process main gives val
+begin
+  give back f();
+end
