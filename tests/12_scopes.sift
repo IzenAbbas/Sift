@@ -1,0 +1,29 @@
+-- Each process has its own variables; val and flag are passed by value.
+process change using x: val, f: flag gives val
+begin
+  set x = x + 100;
+  set f = not f;
+  show x;
+  show f;
+  declare total: val = 1;
+  give back total;
+end
+
+process main gives val
+begin
+  declare x: val = 5;
+  declare f: flag = no;
+  declare total: val = 50;
+  show change(x, f);
+  -- unchanged: the process changed its own copies
+  show x;
+  show f;
+  show total;
+  check x > 0
+  begin
+    declare total: val = 7;
+    show total;
+  end
+  show total;
+  give back 0;
+end

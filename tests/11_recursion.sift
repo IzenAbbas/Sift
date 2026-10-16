@@ -1,0 +1,62 @@
+-- Recursion, including mutual recursion.
+process factorial using n: val gives val
+begin
+  check n <= 1
+  begin
+    give back 1;
+  end
+  give back n * factorial(n - 1);
+end
+
+process fib using n: val gives val
+begin
+  check n < 2
+  begin
+    give back n;
+  end
+  otherwise
+  begin
+    give back fib(n - 1) + fib(n - 2);
+  end
+end
+
+process gcd using a: val, b: val gives val
+begin
+  check b = 0
+  begin
+    give back a;
+  end
+  give back gcd(b, a % b);
+end
+
+process is_even using n: val gives flag
+begin
+  check n = 0
+  begin
+    give back yes;
+  end
+  give back is_odd(n - 1);
+end
+
+process is_odd using n: val gives flag
+begin
+  check n = 0
+  begin
+    give back no;
+  end
+  give back is_even(n - 1);
+end
+
+process main gives val
+begin
+  show factorial(10);
+  repeat i from 0 below 10
+  begin
+    show fib(i);
+  end
+  show gcd(1071, 462);
+  show is_even(10);
+  show is_odd(7);
+  show is_even(7);
+  give back 0;
+end

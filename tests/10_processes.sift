@@ -1,0 +1,55 @@
+-- Processes: parameters, give back, calls before the definition,
+-- processes without gives, and calling a gives-process as a statement.
+process main gives val
+begin
+  show square(7);
+  show add3(1, 2, 3);
+  show is_big(50);
+  show is_big(square(10));
+  greet(4);
+  show bump(1);
+  bump(5);          -- result is discarded
+  report(no);
+  report(yes);
+  give back 0;
+end
+
+process square using n: val gives val
+begin
+  give back n * n;
+end
+
+process add3 using a: val, b: val, c: val gives val
+begin
+  give back a + b + c;
+end
+
+process is_big using n: val gives flag
+begin
+  give back n > 99;
+end
+
+-- no gives: reaches end without give back
+process greet using times: val
+begin
+  repeat i from 0 below times
+  begin
+    show i;
+  end
+end
+
+process bump using x: val gives val
+begin
+  show x;
+  give back x + 1;
+end
+
+-- no gives: leaves early with an empty give back
+process report using quiet: flag
+begin
+  check quiet
+  begin
+    give back;
+  end
+  show 1000;
+end
