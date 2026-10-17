@@ -1,0 +1,1 @@
+:4: error: 'x' is a val, not a buffer, so it cannot be indexed

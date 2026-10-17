@@ -1,0 +1,7 @@
+process main gives val
+begin
+  declare d: buffer = [1, 2, 3];
+  show d[0];
+  show d[3];
+  give back 0;
+end

@@ -1,0 +1,5 @@
+process main gives val
+begin
+  declare d: buffer;
+  give back 0;
+end

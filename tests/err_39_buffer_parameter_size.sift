@@ -1,0 +1,9 @@
+process f using d: buffer[3] gives val
+begin
+  give back d[0];
+end
+
+process main gives val
+begin
+  give back 0;
+end

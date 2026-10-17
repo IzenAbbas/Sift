@@ -1,0 +1,8 @@
+process main gives val
+begin
+  declare d: buffer[2];
+  declare i: val = 0;
+  set i = i - 1;
+  set d[i] = 5;
+  give back 0;
+end
