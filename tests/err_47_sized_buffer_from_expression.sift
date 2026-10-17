@@ -1,0 +1,6 @@
+process main gives val
+begin
+  declare a: buffer = [1, 2];
+  declare b: buffer[2] = a;
+  give back 0;
+end

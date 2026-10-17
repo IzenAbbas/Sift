@@ -1,0 +1,9 @@
+process main gives val
+begin
+  declare d: buffer = [1, 2];
+  sweep x in d
+  begin
+    set x = 0;
+  end
+  give back 0;
+end

@@ -1,0 +1,5 @@
+process main gives val
+begin
+  show yes within 0..1;
+  give back 0;
+end
