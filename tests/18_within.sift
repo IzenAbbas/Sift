@@ -1,0 +1,24 @@
+-- x within lo..hi is inclusive at both ends.
+process noisy using n: val gives val
+begin
+  show n;
+  give back n;
+end
+
+process main gives val
+begin
+  show 5 within 1..10;
+  show 1 within 1..10;
+  show 10 within 1..10;
+  show 0 within 1..10;
+  show 11 within 1..10;
+  show -3 within -5..-1;
+  show 7 within 7..7;
+  show 5 within 10..1;
+  declare lo: val = 2;
+  show lo * 3 within lo + 1..lo * 4;
+  show not (50 within 0..40);
+  -- the value is evaluated only once (noisy prints when called)
+  show noisy(4) within 0..9;
+  give back 0;
+end

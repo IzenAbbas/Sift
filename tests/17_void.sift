@@ -1,0 +1,46 @@
+-- void marks a missing value.
+process main gives val
+begin
+  declare x: val = void;
+  show x;
+  show x is void;
+  show 5 is void;
+  set x = 3;
+  show x is void;
+  show not (x is void);
+
+  declare d: buffer = [1, void, 3];
+  declare missing: val = 0;
+  sweep v in d
+  begin
+    check v is void
+    begin
+      set missing = missing + 1;
+    end
+  end
+  show missing;
+  show d[1];
+  set d[1] = 2;
+  show d[1] is void;
+
+  -- void is a val, so it can be compared and passed around
+  show void = void;
+  show first_missing(d);
+  set d[2] = void;
+  show first_missing(d);
+  -- arithmetic on void is not checked: it just uses -2147483648
+  show void + 1;
+  give back 0;
+end
+
+process first_missing using d: buffer gives val
+begin
+  repeat i from 0 below count d
+  begin
+    check d[i] is void
+    begin
+      give back i;
+    end
+  end
+  give back -1;
+end
