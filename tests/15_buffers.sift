@@ -1,0 +1,61 @@
+-- Buffers: declaring, indexing, count, reference semantics.
+process fill using d: buffer, value: val
+begin
+  repeat i from 0 below count d
+  begin
+    set d[i] = value;
+  end
+end
+
+process make_range using n: val gives buffer
+begin
+  declare r: buffer = [0, 0, 0, 0, 0];
+  repeat i from 0 below n
+  begin
+    set r[i] = i * i;
+  end
+  -- r's storage lives on after the process returns
+  give back r;
+end
+
+process main gives val
+begin
+  declare zeros: buffer[3];
+  show zeros[0] + zeros[1] + zeros[2];
+  show count zeros;
+
+  declare a: buffer[4] = [10, 20, 30, 40];
+  declare b: buffer = [1 + 1, 2 * 3];
+  show count a;
+  show count b;
+  show a[0];
+  show a[3];
+  show b[1];
+
+  set a[1] = a[0] + a[2];
+  show a[1];
+  declare k: val = 2;
+  set a[k + 1] = -5;
+  show a[3];
+  show a[a[3] + 7];
+
+  -- set copies the reference: c and a are the same buffer
+  declare c: buffer = a;
+  set c[0] = 99;
+  show a[0];
+  set c = b;
+  set c[0] = 77;
+  show b[0];
+  show a[0];
+
+  -- a process changes the caller's buffer
+  fill(a, 8);
+  show a[0] + a[1] + a[2] + a[3];
+
+  -- a buffer given back by a process
+  declare r: buffer = make_range(5);
+  show r[4];
+  show count make_range(2);
+  show count(r);
+  give back 0;
+end

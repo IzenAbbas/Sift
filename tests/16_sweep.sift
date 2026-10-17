@@ -1,0 +1,53 @@
+-- sweep goes through a buffer in order.
+process main gives val
+begin
+  declare d: buffer = [5, 3, 8, 1];
+  declare total: val = 0;
+  sweep x in d
+  begin
+    set total = total + x;
+  end
+  show total;
+
+  -- stop and skip in a sweep
+  sweep x in d
+  begin
+    check x = 3
+    begin
+      skip;
+    end
+    check x = 1
+    begin
+      stop;
+    end
+    show x;
+  end
+
+  -- x is a copy: changing the buffer through the index is seen
+  -- for elements that have not been reached yet
+  sweep x in d
+  begin
+    check x = 5
+    begin
+      set d[3] = 100;
+    end
+    show x;
+  end
+
+  -- sweep over the result of a process
+  sweep y in doubled(d)
+  begin
+    show y;
+  end
+  give back 0;
+end
+
+process doubled using d: buffer gives buffer
+begin
+  declare out: buffer = [0, 0, 0, 0];
+  repeat i from 0 below count d
+  begin
+    set out[i] = d[i] * 2;
+  end
+  give back out;
+end
