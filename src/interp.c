@@ -8,6 +8,7 @@
  * Statements return a Flow value that says whether execution continues
  * normally or a `give back` is unwinding out of the process.
  */
+#include <limits.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -93,6 +94,28 @@ static int32_t do_arith(Expr *e, int32_t a, int32_t b)
     }
 }
 
+/* ---------- buffers ---------- */
+
+/* The value used for `void` (a missing value). */
+#define VOID_VALUE INT32_MIN
+
+/* New buffer storage of n elements, all 0. It is never freed: Sift
+ * programs are short-lived, and a process may give back a buffer it
+ * declared, so the storage must outlive the process. */
+static Buffer new_buffer(int32_t n)
+{
+    Buffer b;
+    b.data = xcalloc(n, sizeof(int32_t));
+    b.len = n;
+    return b;
+}
+
+static void check_index(int line, int32_t index, Buffer b)
+{
+    if (index < 0 || index >= b.len)
+        runtime_error(line, "index %d out of bounds for buffer of length %d", index, b.len);
+}
+
 /* ---------- expressions ---------- */
 
 static Value eval(Frame *f, Expr *e);
@@ -141,8 +164,27 @@ static Value eval(Frame *f, Expr *e)
     case EXPR_INT:
     case EXPR_BOOL:
         return make_num(e->ival);
+    case EXPR_VOID:
+        return make_num(VOID_VALUE);
     case EXPR_VAR:
         return f->slots[e->slot];
+    case EXPR_INDEX: {
+        Buffer b = f->slots[e->slot].buf;
+        int32_t index = eval(f, e->left).num;
+        check_index(e->line, index, b);
+        return make_num(b.data[index]);
+    }
+    case EXPR_COUNT:
+        return make_num(eval(f, e->left).buf.len);
+    case EXPR_ISVOID:
+        return make_num(eval(f, e->left).num == VOID_VALUE);
+    case EXPR_WITHIN: {
+        /* x within lo..hi  is  lo <= x and x <= hi, with x evaluated once */
+        int32_t x = eval(f, e->left).num;
+        int32_t lo = eval(f, e->right).num;
+        int32_t hi = eval(f, e->third).num;
+        return make_num(lo <= x && x <= hi);
+    }
     case EXPR_NEG:
         return make_num(wrap(0u - (uint32_t)eval(f, e->left).num));
     case EXPR_NOT:
@@ -151,10 +193,9 @@ static Value eval(Frame *f, Expr *e)
         return eval_binary(f, e);
     case EXPR_CALL:
         return call_process(f, e);
-    default:
-        runtime_error(e->line, "internal error: unknown expression");
-        return make_num(0);
     }
+    runtime_error(e->line, "internal error: unknown expression");
+    return make_num(0);
 }
 
 /* ---------- statements ---------- */
@@ -165,8 +206,32 @@ static void show(Expr *e, Value v)
 {
     if (e->type == TY_FLAG)
         printf("%s\n", v.num ? "yes" : "no");
+    else if (v.num == VOID_VALUE)
+        printf("void\n");
     else
         printf("%d\n", v.num);
+}
+
+/* Value of a declaration: the initialiser, a new buffer, or the default
+ * (0 for val, no for flag). */
+static Value declare_value(Frame *f, Stmt *s)
+{
+    if (s->list != NULL) {
+        /* declare d: buffer = [a, b, c]; elements evaluated left to right */
+        Value v = make_num(0);
+        v.buf = new_buffer(s->list->count);
+        for (int i = 0; i < s->list->count; i++)
+            v.buf.data[i] = eval(f, s->list->items[i]).num;
+        return v;
+    }
+    if (s->value != NULL)
+        return eval(f, s->value);
+    if (s->decl_type.kind == TY_BUFFER) {
+        Value v = make_num(0);
+        v.buf = new_buffer(s->decl_type.size);    /* all zeros */
+        return v;
+    }
+    return make_num(0);
 }
 
 /* Run one iteration's body and decide what the loop does next.
@@ -192,11 +257,20 @@ static Flow exec_stmt(Frame *f, Stmt *s)
     switch (s->kind) {
     case STMT_DECLARE:
         /* no initialiser: val starts at 0, flag at no (also 0) */
-        f->slots[s->slot] = s->value ? eval(f, s->value) : make_num(0);
+        f->slots[s->slot] = declare_value(f, s);
         return FLOW_NORMAL;
 
     case STMT_SET:
-        f->slots[s->slot] = eval(f, s->value);
+        if (s->index != NULL) {
+            /* set d[i] = v : index first, bounds check, then the value */
+            Buffer b = f->slots[s->slot].buf;
+            int32_t index = eval(f, s->index).num;
+            check_index(s->line, index, b);
+            b.data[index] = eval(f, s->value).num;
+        } else {
+            /* for a buffer this copies the pointer and length only */
+            f->slots[s->slot] = eval(f, s->value);
+        }
         return FLOW_NORMAL;
 
     case STMT_CHECK:
