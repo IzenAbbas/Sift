@@ -184,6 +184,23 @@ static TypeKind check_call(Expr *e)
     return p->ret.kind;
 }
 
+/* Find the buffer variable `name` for an indexing d[i]. Reports an
+ * error and returns NULL if it is undeclared or not a buffer. */
+static Symbol *lookup_buffer(const char *name, int line)
+{
+    Symbol *sym = lookup(name);
+    if (sym == NULL) {
+        report_error(line, "'%s' is not declared", name);
+        return NULL;
+    }
+    if (sym->type != TY_BUFFER) {
+        report_error(line, "'%s' is a %s, not a buffer, so it cannot be indexed",
+                     name, type_name(sym->type));
+        return NULL;
+    }
+    return sym;
+}
+
 /* Work out (and record in e->type) the type of an expression. */
 static TypeKind check_expr(Expr *e)
 {
@@ -196,6 +213,9 @@ static TypeKind check_expr(Expr *e)
         break;
     case EXPR_BOOL:
         t = TY_FLAG;
+        break;
+    case EXPR_VOID:
+        t = TY_VAL;              /* void is a val: the "missing" sentinel */
         break;
     case EXPR_VAR:
         sym = lookup(e->name);
@@ -225,8 +245,26 @@ static TypeKind check_expr(Expr *e)
             t = TY_ERROR;
         }
         break;
-    default:
-        report_error(e->line, "this kind of expression is not supported yet");
+    case EXPR_INDEX:
+        sym = lookup_buffer(e->name, e->line);
+        if (sym != NULL)
+            e->slot = sym->slot;
+        expect_type(e->left, TY_VAL, "index");
+        t = TY_VAL;
+        break;
+    case EXPR_COUNT:
+        expect_type(e->left, TY_BUFFER, "operand of 'count'");
+        t = TY_VAL;
+        break;
+    case EXPR_ISVOID:
+        expect_type(e->left, TY_VAL, "operand of 'is void'");
+        t = TY_FLAG;
+        break;
+    case EXPR_WITHIN:
+        expect_type(e->left, TY_VAL, "value tested by 'within'");
+        expect_type(e->right, TY_VAL, "lower bound of 'within'");
+        expect_type(e->third, TY_VAL, "upper bound of 'within'");
+        t = TY_FLAG;
         break;
     }
     e->type = t;
@@ -237,18 +275,45 @@ static TypeKind check_expr(Expr *e)
 
 static void check_block(Block *b);
 
+/* The ways to declare a buffer:
+ *   declare d: buffer[4];               4 zeros
+ *   declare d: buffer[4] = [1, 2, 3, 4]; list length must be 4
+ *   declare d: buffer = [1, 2, 3];       size taken from the list
+ *   declare d: buffer = other;           shares other's elements
+ */
+static void check_buffer_declare(Stmt *s)
+{
+    int size = s->decl_type.size;
+    if (s->list != NULL) {
+        if (size >= 0 && size != s->list->count)
+            report_error(s->line, "buffer '%s' has size %d but the list has %d value%s",
+                         s->name, size, s->list->count, s->list->count == 1 ? "" : "s");
+    } else if (s->value != NULL) {
+        if (size >= 0)
+            report_error(s->line, "a buffer with a size can only be initialised with a list "
+                         "(write 'buffer' without a size to share another buffer)");
+        expect_type(s->value, TY_BUFFER, "initial value");
+    } else if (size < 0) {
+        report_error(s->line, "buffer '%s' needs a size or an initial value", s->name);
+    }
+    if (size == 0)
+        report_error(s->line, "a buffer must have at least one element");
+}
+
 static void check_declare(Stmt *s)
 {
     TypeKind t = s->decl_type.kind;
-    if (t == TY_BUFFER) {
-        report_error(s->line, "buffers are not supported yet");
-        return;
-    }
-    if (s->list != NULL)
-        report_error(s->line, "a list can only initialise a buffer");
     /* The initialiser is checked before the new name exists, so
      * `declare x: val = x + 1;` refers to an outer x. */
-    if (s->value != NULL)
+    if (s->list != NULL) {
+        if (t != TY_BUFFER)
+            report_error(s->line, "a list can only initialise a buffer");
+        for (int i = 0; i < s->list->count; i++)
+            expect_type(s->list->items[i], TY_VAL, "buffer element");
+    }
+    if (t == TY_BUFFER)
+        check_buffer_declare(s);
+    else if (s->value != NULL)
         expect_type(s->value, t, "initial value");
     s->slot = declare(s->name, t, s->line, 0);
 }
@@ -258,6 +323,8 @@ static void check_set(Stmt *s)
     Symbol *sym = lookup(s->name);
     if (sym == NULL) {
         report_error(s->line, "'%s' is not declared", s->name);
+        if (s->index != NULL)
+            check_expr(s->index);
         check_expr(s->value);
         return;
     }
@@ -265,9 +332,15 @@ static void check_set(Stmt *s)
     if (sym->readonly)
         report_error(s->line, "cannot set loop variable '%s'", s->name);
     if (s->index != NULL) {
-        report_error(s->line, "indexing is not supported yet");
+        /* set d[i] = v : d must be a buffer, i and v must be val */
+        if (sym->type != TY_BUFFER && sym->type != TY_ERROR)
+            report_error(s->line, "'%s' is a %s, not a buffer, so it cannot be indexed",
+                         s->name, type_name(sym->type));
+        expect_type(s->index, TY_VAL, "index");
+        expect_type(s->value, TY_VAL, "buffer element");
         return;
     }
+    /* set d = other (for buffers) copies only the reference */
     expect_type(s->value, sym->type, "assigned value");
 }
 
@@ -327,7 +400,8 @@ static void check_stmt(Stmt *s)
             report_error(s->line, "'%s' used outside a loop", s->kind == STMT_STOP ? "stop" : "skip");
         break;
     case STMT_SHOW:
-        check_expr(s->value);
+        if (check_expr(s->value) == TY_BUFFER)
+            report_error(s->line, "cannot show a whole buffer (show its elements, e.g. with sweep)");
         break;
     case STMT_GIVE:
         if (cur_proc->ret.kind == TY_NONE) {
