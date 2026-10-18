@@ -1,0 +1,29 @@
+-- Insertion sort (proposal, Example 1), with a main that uses it.
+
+process sort_buffer using data: buffer gives buffer
+begin
+  repeat i from 1 below count data
+  begin
+    declare current: val = data[i];
+    declare j: val = i - 1;
+    -- "and" short-circuits, so data[-1] is never read
+    repeat while j >= 0 and data[j] > current
+    begin
+      set data[j + 1] = data[j];
+      set j = j - 1;
+    end
+    set data[j + 1] = current;
+  end
+  give back data;
+end
+
+process main gives val
+begin
+  declare numbers: buffer = [42, 7, 19, 3, 88, 7, 0, 25];
+  set numbers = sort_buffer(numbers);
+  sweep x in numbers
+  begin
+    show x;
+  end
+  give back 0;
+end
