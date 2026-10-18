@@ -1,0 +1,10 @@
+process add using a: val, b: val gives val
+begin
+  give back a + b;
+end
+
+process main gives val
+begin
+  show 3 |> add(1, 2);
+  give back 0;
+end

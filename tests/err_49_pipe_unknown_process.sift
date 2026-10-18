@@ -1,0 +1,5 @@
+process main gives val
+begin
+  show 3 |> triple;
+  give back 0;
+end
