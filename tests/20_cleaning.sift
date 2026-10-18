@@ -1,0 +1,82 @@
+-- Any reading outside [low, high] is treated as missing.
+process mark_outliers using data: buffer, low: val, high: val gives buffer
+begin
+  repeat i from 0 below count data
+  begin
+    check data[i] is void
+    begin
+      skip;
+    end
+    else check not (data[i] within low..high)
+    begin
+      set data[i] = void;
+    end
+  end
+  give back data;
+end
+
+-- Average of the values that are not missing.
+process mean_of using data: buffer gives val
+begin
+  declare total: val = 0;
+  declare seen: val = 0;
+  sweep x in data
+  begin
+    check x is void
+    begin
+      skip;
+    end
+    set total = total + x;
+    set seen = seen + 1;
+  end
+  check seen = 0
+  begin
+    give back 0;
+  end
+  give back total / seen;
+end
+
+-- Replace every missing value with the mean.
+process fill_missing using data: buffer gives buffer
+begin
+  declare avg: val = mean_of(data);
+  repeat i from 0 below count data
+  begin
+    check data[i] is void
+    begin
+      set data[i] = avg;
+    end
+  end
+  give back data;
+end
+
+process sort_buffer using data: buffer gives buffer
+begin
+  repeat i from 1 below count data
+  begin
+    declare current: val = data[i];
+    declare j: val = i - 1;
+    -- "and" short-circuits, so data[-1] is never read
+    repeat while j >= 0 and data[j] > current
+    begin
+      set data[j + 1] = data[j];
+      set j = j - 1;
+    end
+    set data[j + 1] = current;
+  end
+  give back data;
+end
+
+process main gives val
+begin
+  declare readings: buffer[8] = [12, void, 97, 15, 300, 14, void, 11];
+  set readings = readings
+    |> mark_outliers(0, 100)
+    |> fill_missing
+    |> sort_buffer;
+  sweep x in readings
+  begin
+    show x;
+  end
+  give back 0;
+end
