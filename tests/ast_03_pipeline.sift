@@ -1,0 +1,10 @@
+-- The parser rewrites pipelines into ordinary calls.
+process main gives val
+begin
+  set readings = readings
+    |> mark_outliers(0, 100)
+    |> fill_missing
+    |> sort_buffer;
+  show a |> f |> g(5);
+  give back 0;
+end

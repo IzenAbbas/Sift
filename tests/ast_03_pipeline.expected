@@ -1,0 +1,17 @@
+program
+  process main gives val  (line 2)
+    block
+      set readings  (line 4)
+        call sort_buffer
+          call fill_missing
+            call mark_outliers
+              var readings
+              int 0
+              int 100
+      show  (line 8)
+        call g
+          call f
+            var a
+          int 5
+      give back  (line 9)
+        int 0
