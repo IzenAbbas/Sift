@@ -1,0 +1,10 @@
+process log using n: val
+begin
+  show n;
+end
+
+process main gives val
+begin
+  show 3 |> log;
+  give back 0;
+end
