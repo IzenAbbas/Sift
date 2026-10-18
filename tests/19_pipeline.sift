@@ -1,0 +1,74 @@
+-- The pipeline: a |> f(x) means f(a, x).
+process double using n: val gives val
+begin
+  give back n * 2;
+end
+
+process add using n: val, k: val gives val
+begin
+  give back n + k;
+end
+
+process clamp using n: val, lo: val, hi: val gives val
+begin
+  check n < lo
+  begin
+    give back lo;
+  end
+  check n > hi
+  begin
+    give back hi;
+  end
+  give back n;
+end
+
+process trace using n: val gives val
+begin
+  show n;
+  give back n;
+end
+
+process negate_all using d: buffer gives buffer
+begin
+  repeat i from 0 below count d
+  begin
+    set d[i] = -d[i];
+  end
+  give back d;
+end
+
+process total using d: buffer gives val
+begin
+  declare sum: val = 0;
+  sweep x in d
+  begin
+    set sum = sum + x;
+  end
+  give back sum;
+end
+
+process main gives val
+begin
+  show 5 |> double;
+  show 5 |> double |> add(1);
+  show 5 |> add(1) |> double;
+  -- |> has the lowest precedence: the whole sum goes in
+  show 1 + 2 |> double;
+  show 100 |> clamp(0, 50) |> add(-1);
+  -- pipelines inside arguments
+  show 3 |> add(4 |> double);
+  -- a pipeline step can have an empty argument list
+  show 7 |> double();
+  -- left to right: the innermost (first) step runs first
+  show 1 |> trace |> add(10) |> trace;
+  -- buffers flow through a pipeline by reference
+  declare d: buffer = [1, 2, 3];
+  show d |> negate_all |> total;
+  show d[0];
+  -- the result of a pipeline can be compared
+  check (d |> total) < 0
+  begin
+    show 42;
+  end
+  give back 0;
+end
