@@ -1,0 +1,9 @@
+process main gives val
+begin
+  check yes
+  begin
+    declare inner: val = 1;
+  end
+  show inner;
+  give back 0;
+end
