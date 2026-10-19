@@ -1,0 +1,14 @@
+-- Several independent mistakes: every one is reported.
+process f using n: val gives val
+begin
+  give back n;
+end
+
+process main gives val
+begin
+  declare a: val = yes;
+  show f(1, 2);
+  stop;
+  show count a;
+  give back no;
+end

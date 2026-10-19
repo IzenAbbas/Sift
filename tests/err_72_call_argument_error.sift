@@ -1,0 +1,10 @@
+process f using a: val gives val
+begin
+  give back a;
+end
+
+process main gives val
+begin
+  f(nothing);
+  give back 0;
+end
