@@ -1,0 +1,9 @@
+process f using d: buffer gives buffer[3]
+begin
+  give back d;
+end
+
+process main gives val
+begin
+  give back 0;
+end

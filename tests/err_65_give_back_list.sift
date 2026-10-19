@@ -1,0 +1,4 @@
+process f gives buffer[3]
+begin
+  give back [1, 2, 3];
+end
