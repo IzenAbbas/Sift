@@ -1,0 +1,5 @@
+process main gives val
+begin
+  set total = 1;
+  give back 0;
+end
