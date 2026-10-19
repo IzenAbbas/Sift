@@ -1,0 +1,6 @@
+process main gives val
+begin
+  declare d: buffer = [1, 2, 3];
+  set d[0] = no;
+  give back 0;
+end
