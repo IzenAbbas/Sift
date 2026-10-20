@@ -10,15 +10,24 @@ CPPFLAGS = -D_POSIX_C_SOURCE=200809L -Isrc -Ibuild
 FLEX    ?= flex
 BISON   ?= bison
 
+# LLVM tools used by `./sift compile` (and so by `make test`). Override
+# them like this:  make test LLC=llc-18 CLANG=clang-18 OPT=opt-18
+LLC     ?= llc
+CLANG   ?= clang
+OPT     ?= opt
+export LLC CLANG OPT
+
 BUILD = build
 
 # Hand-written C files (in src/) and the two generated ones (in build/).
-SRCS = main.c util.c ast.c sema.c interp.c
+SRCS = main.c util.c ast.c sema.c interp.c codegen.c
 OBJS = $(addprefix $(BUILD)/,$(SRCS:.c=.o)) $(BUILD)/parser.o $(BUILD)/lexer.o
 
 .PHONY: all test clean
 
-all: sift
+# sift_runtime.o is not part of ./sift itself: `./sift compile` links it
+# into every compiled Sift program.
+all: sift $(BUILD)/sift_runtime.o
 
 sift: $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS)
@@ -33,6 +42,9 @@ $(BUILD)/parser.c $(BUILD)/parser.h: src/parser.y | $(BUILD)
 
 $(BUILD)/lexer.c: src/lexer.l $(BUILD)/parser.h | $(BUILD)
 	$(FLEX) -o $@ src/lexer.l
+
+$(BUILD)/sift_runtime.o: src/runtime.c | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 $(BUILD)/%.o: $(BUILD)/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
