@@ -10,13 +10,17 @@
 #   tests/err_NAME.sift   the program must fail (non-zero exit) and stderr
 #                         must contain the text in err_NAME.expected
 #
-# NN_ and err_ tests are run in every mode listed in MODES.
+# NN_ and err_ tests are run in every mode listed in MODES:
+#   run      ./sift run file.sift
+#   compile  ./sift compile file.sift -o prog, then ./prog
+# While the compiler is being written (milestones 9-12), a test that uses
+# a feature the compiler does not support yet is reported as SKIP.
 # Usage:  ./run_tests.sh            (all modes)
 #         ./run_tests.sh run        (interpreter only)
 
 cd "$(dirname "$0")" || exit 1
 
-MODES="run"
+MODES="run compile"
 if [ $# -gt 0 ]; then
     MODES="$*"
 fi
@@ -27,9 +31,13 @@ trap 'rm -rf "$TMP"' EXIT
 
 pass=0
 fail=0
+skip=0
 
 report() {   # report RESULT NAME [DETAIL]
-    if [ "$1" = PASS ]; then
+    if [ "$1" = SKIP ]; then
+        skip=$((skip + 1))
+        echo "SKIP  $2"
+    elif [ "$1" = PASS ]; then
         pass=$((pass + 1))
         echo "PASS  $2"
     else
@@ -82,7 +90,9 @@ for mode in $MODES; do
         want_status=0
         [ -f "tests/$name.exitcode" ] && want_status=$(cat "tests/$name.exitcode")
         run_program "$mode" "$src"
-        if ! diff -u "tests/$name.expected" "$TMP/out" > "$TMP/diff"; then
+        if grep -q "not supported by the compiler yet" "$TMP/err"; then
+            report SKIP "$name [$mode]"
+        elif ! diff -u "tests/$name.expected" "$TMP/out" > "$TMP/diff"; then
             report FAIL "$name [$mode]" "$(head -20 "$TMP/diff"; head -5 "$TMP/err")"
         elif [ "$status" != "$want_status" ]; then
             report FAIL "$name [$mode]" "exit code $status, expected $want_status
@@ -97,7 +107,9 @@ $(head -5 "$TMP/err")"
         name=$(basename "$src" .sift)
         want=$(cat "tests/$name.expected")
         run_program "$mode" "$src"
-        if [ "$status" = 0 ]; then
+        if grep -q "not supported by the compiler yet" "$TMP/err"; then
+            report SKIP "$name [$mode]"
+        elif [ "$status" = 0 ]; then
             report FAIL "$name [$mode]" "expected failure, but exit code was 0"
         elif ! grep -qF -- "$want" "$TMP/err"; then
             report FAIL "$name [$mode]" "stderr does not contain: $want
@@ -109,5 +121,5 @@ got: $(head -5 "$TMP/err")"
 done
 
 echo
-echo "$pass passed, $fail failed, $((pass + fail)) total"
+echo "$pass passed, $fail failed, $skip skipped, $((pass + fail + skip)) total"
 [ $fail -eq 0 ]
