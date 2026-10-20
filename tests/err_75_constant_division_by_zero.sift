@@ -1,0 +1,6 @@
+process main gives val
+begin
+  show 5;
+  show 1 / 0;
+  give back 0;
+end

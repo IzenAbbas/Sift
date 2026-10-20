@@ -1,0 +1,22 @@
+-- Constant expressions (the first thing the compiler handled).
+process main gives val
+begin
+  show 42;
+  show -2147483647 - 1;
+  show yes;
+  show no;
+  show not yes;
+  show 3 < 4;
+  show 4 <= 3;
+  show 7 = 7;
+  show yes != no;
+  show no = no;
+  show void;
+  show 12 / -1;
+  -- void is INT_MIN, and INT_MIN / -1 wraps back to INT_MIN
+  show void / -1;
+  show void % -1;
+  show -7 / 2;
+  show -7 % 2;
+  give back 3 * 4 - 12;
+end
