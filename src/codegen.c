@@ -303,6 +303,7 @@ static void gen_declare(Stmt *s)
  *   next2:  B3;  br end
  *   end:
  */
+/* Implemented conditional branching for check/otherwise */
 static void gen_check(Stmt *s)
 {
     int end = new_label();
