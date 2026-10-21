@@ -18,7 +18,7 @@
 int32_t sift_main(void);   /* generated from the Sift program */
 
 /* Print "runtime error: line N: ..." and stop with exit code 1. */
-static void runtime_error(int32_t line, const char *message)
+static _Noreturn void runtime_error(int32_t line, const char *message)
 {
     fflush(stdout);
     fprintf(stderr, "runtime error: line %d: %s\n", (int)line, message);
@@ -40,29 +40,29 @@ void sift_show_flag(bool value)
     printf("%s\n", value ? "yes" : "no");
 }
 
-/* Called before every `/`. */
-void sift_check_div(int32_t divisor, int32_t line)
+/* The generated code checks for errors itself (one compare and a branch)
+ * and calls one of these only when something is wrong. They never
+ * return. The division is placed in a separate basic block that is only
+ * reached when the divisor is not zero: a call followed by the division
+ * in the same block is not enough, because llc may move the division
+ * instruction above the call. */
+
+void sift_div_by_zero(int32_t line)
 {
-    if (divisor == 0)
-        runtime_error(line, "division by zero");
+    runtime_error(line, "division by zero");
 }
 
-/* Called before every `%`. */
-void sift_check_mod(int32_t divisor, int32_t line)
+void sift_mod_by_zero(int32_t line)
 {
-    if (divisor == 0)
-        runtime_error(line, "modulo by zero");
+    runtime_error(line, "modulo by zero");
 }
 
-/* Called before every buffer element read or write. */
-void sift_check_index(int32_t index, int32_t length, int32_t line)
+void sift_index_error(int32_t index, int32_t length, int32_t line)
 {
-    if (index < 0 || index >= length) {
-        fflush(stdout);
-        fprintf(stderr, "runtime error: line %d: index %d out of bounds for buffer of length %d\n",
-                (int)line, (int)index, (int)length);
-        exit(1);
-    }
+    fflush(stdout);
+    fprintf(stderr, "runtime error: line %d: index %d out of bounds for buffer of length %d\n",
+            (int)line, (int)index, (int)length);
+    exit(1);
 }
 
 /* Storage for a new buffer of n elements, all 0. Never freed: Sift
