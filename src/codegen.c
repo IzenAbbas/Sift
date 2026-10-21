@@ -345,6 +345,7 @@ static void gen_loop_body(Block *b, int next, int exit)
  *   body:  B;  br head          (skip -> head, stop -> exit)
  *   exit:
  */
+/* Implemented repeat loops */
 static void gen_while(Stmt *s)
 {
     int head = new_label(), loop_body = new_label(), exit = new_label();
