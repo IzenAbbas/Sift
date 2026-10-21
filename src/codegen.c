@@ -1,4 +1,3 @@
-/* LLVM Code Generator - Basic Blocks and Variables */
 /*
  * codegen.c -- Phase 2: turns the checked AST into textual LLVM IR.
  *
@@ -303,7 +302,6 @@ static void gen_declare(Stmt *s)
  *   next2:  B3;  br end
  *   end:
  */
-/* Implemented conditional branching for check/otherwise */
 static void gen_check(Stmt *s)
 {
     int end = new_label();
@@ -345,7 +343,6 @@ static void gen_loop_body(Block *b, int next, int exit)
  *   body:  B;  br head          (skip -> head, stop -> exit)
  *   exit:
  */
-/* Implemented repeat loops */
 static void gen_while(Stmt *s)
 {
     int head = new_label(), loop_body = new_label(), exit = new_label();
