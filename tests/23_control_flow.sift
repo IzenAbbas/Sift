@@ -1,0 +1,79 @@
+-- Corner cases of control flow (empty blocks, code after stop/skip,
+-- give back inside loops, deep nesting).
+process main gives val
+begin
+  -- empty blocks
+  check yes
+  begin
+  end
+  otherwise
+  begin
+  end
+  repeat i from 0 below 3
+  begin
+  end
+  -- statements after stop / skip are never run
+  repeat i from 0 below 3
+  begin
+    skip;
+    show 999;
+  end
+  repeat while yes
+  begin
+    stop;
+    show 998;
+  end
+  -- skip in a while loop must still let the condition be checked again
+  declare n: val = 0;
+  repeat while n < 3
+  begin
+    set n = n + 1;
+    skip;
+  end
+  show n;
+  -- three nested loops with stop and skip at different levels
+  declare hits: val = 0;
+  repeat a from 0 below 4
+  begin
+    check a = 2
+    begin
+      skip;
+    end
+    repeat b from 0 below 4
+    begin
+      declare c: val = 0;
+      repeat while c < 4
+      begin
+        set c = c + 1;
+        check c = 2
+        begin
+          skip;
+        end
+        check c = 4
+        begin
+          stop;
+        end
+        set hits = hits + 1;
+      end
+      check b = 1
+      begin
+        stop;
+      end
+    end
+  end
+  show hits;
+  -- give back from inside nested loops in main
+  repeat i from 0 below 100
+  begin
+    repeat j from 0 below 100
+    begin
+      check i * j = 12
+      begin
+        show i;
+        show j;
+        give back i + j;
+      end
+    end
+  end
+  give back 0;
+end
