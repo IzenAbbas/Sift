@@ -6,7 +6,7 @@
 
 CC       = gcc
 CFLAGS  ?= -std=c11 -Wall -Wextra -O2 -g
-CPPFLAGS = -D_POSIX_C_SOURCE=200809L -Isrc -Ibuild
+CPPFLAGS = -D_POSIX_C_SOURCE=200809L -Isrc -Ibuild -pthread
 FLEX    ?= flex
 BISON   ?= bison
 
@@ -29,8 +29,9 @@ OBJS = $(addprefix $(BUILD)/,$(SRCS:.c=.o)) $(BUILD)/parser.o $(BUILD)/lexer.o
 # into every compiled Sift program.
 all: sift $(BUILD)/sift_runtime.o
 
+# -pthread: the interpreter runs on a thread with a big stack (interp.c)
 sift: $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS)
+	$(CC) $(CFLAGS) -pthread -o $@ $(OBJS)
 
 $(BUILD):
 	mkdir -p $(BUILD)
