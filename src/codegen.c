@@ -178,6 +178,7 @@ static char *gen_expr(Expr *e);
 
 /* f(a, b): arguments are evaluated left to right, then the call.
  * Returns the result operand (NULL for a process without gives). */
+/* Process invocation and return handling */
 static char *gen_call(Expr *e)
 {
     Process *p = e->proc;
