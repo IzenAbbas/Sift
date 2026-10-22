@@ -1,3 +1,4 @@
+/* Process code generation and function signatures */
 /*
  * codegen.c -- Phase 2: turns the checked AST into textual LLVM IR.
  *
@@ -161,9 +162,46 @@ static void store_slot(int slot, const char *value)
     emit("store %s %s, ptr %s", llvm_type(slot_type(slot)), value, slot_name(slot));
 }
 
+/* LLVM name of a process. The Sift `main` becomes @sift_main, which the
+ * C main in runtime.c calls. Other processes get a "sift." prefix, so a
+ * process called e.g. `printf` cannot clash with a C library function. */
+static char *function_name(Process *p)
+{
+    if (strcmp(p->name, "main") == 0)
+        return "@sift_main";
+    return fmt("@sift.%s", p->name);
+}
+
 /* ---------- expressions ---------- */
 
 static char *gen_expr(Expr *e);
+
+/* f(a, b): arguments are evaluated left to right, then the call.
+ * Returns the result operand (NULL for a process without gives). */
+static char *gen_call(Expr *e)
+{
+    Process *p = e->proc;
+    int n = e->args->count;
+    char **values = xmalloc(n * sizeof(char *));
+    for (int i = 0; i < n; i++)
+        values[i] = gen_expr(e->args->items[i]);
+
+    /* build the argument list text: "i32 %t1, i1 true, ..." */
+    char *arglist = "";
+    for (int i = 0; i < n; i++) {
+        Expr *arg = e->args->items[i];
+        arglist = fmt("%s%s%s %s", arglist, i ? ", " : "", llvm_type(arg->type), values[i]);
+    }
+    free(values);
+
+    if (p->ret.kind == TY_NONE) {
+        emit("call void %s(%s)", function_name(p), arglist);
+        return NULL;
+    }
+    char *r = new_tmp();
+    emit("%s = call %s %s(%s)", r, llvm_type(p->ret.kind), function_name(p), arglist);
+    return r;
+}
 
 /* + - * / % with the runtime zero check before / and %. */
 static char *gen_arith(Expr *e, char *a, char *b)
@@ -267,6 +305,8 @@ static char *gen_expr(Expr *e)
         return r;
     case EXPR_BINARY:
         return gen_binary(e);
+    case EXPR_CALL:
+        return gen_call(e);
     default:
         unsupported(e->line, "this expression");
         return "0";
@@ -428,8 +468,16 @@ static void gen_stmt(Stmt *s)
             emit("call void @sift_show_val(i32 %s)", gen_expr(s->value));
         break;
     case STMT_GIVE:
-        emit("ret i32 %s", gen_expr(s->value));
+        if (s->value == NULL) {
+            emit("ret void");
+        } else {
+            char *value = gen_expr(s->value);
+            emit("ret %s %s", llvm_type(s->value->type), value);
+        }
         terminated = 1;
+        break;
+    case STMT_CALL:
+        gen_call(s->value);       /* a result, if any, is not used */
         break;
     default:
         unsupported(s->line, "this statement");
@@ -445,7 +493,17 @@ static void gen_block(Block *b)
 
 /* ---------- the whole program ---------- */
 
-static void gen_main(Process *p)
+/* Generate one process as an LLVM function:
+ *
+ *   define i32 @sift.f(i32 %a.n, ...) {
+ *   entry:
+ *     <allocas for every variable>
+ *     <store each parameter into its variable>
+ *     <body>
+ *     <what happens if the end is reached>
+ *   }
+ */
+static void gen_process(Process *p)
 {
     cur_proc = p;
     tmp_count = 0;
@@ -455,17 +513,35 @@ static void gen_main(Process *p)
     body = open_memstream(&body_text, &body_size);
     allocas = open_memstream(&allocas_text, &allocas_size);
 
-    /* one alloca per variable slot */
+    /* one alloca per variable slot (parameters are slots 0..n-1) */
     for (int slot = 0; slot < p->nslots; slot++)
         fprintf(allocas, "  %s = alloca %s\n", slot_name(slot), llvm_type(slot_type(slot)));
 
+    /* parameters arrive as %a.NAME; copy them into their variables so the
+     * body can treat them like any other variable */
+    char *params = "";
+    for (int i = 0; i < p->params->count; i++) {
+        Param *param = p->params->items[i];
+        const char *ty = llvm_type(param->type.kind);
+        params = fmt("%s%s%s %%a.%s", params, i ? ", " : "", ty, param->name);
+        emit("store %s %%a.%s, ptr %s", ty, param->name, slot_name(i));
+    }
+
     gen_block(p->body);
-    /* sema guarantees main ends with give back, so this is never reached */
-    emit_unreachable();
+
+    /* Reaching the end of the body: a process without gives just returns.
+     * For a gives process sema makes this impossible, but just in case it
+     * is a runtime error. */
+    if (p->ret.kind == TY_NONE) {
+        emit("ret void");
+    } else {
+        emit("call void @sift_missing_give_back(ptr @name.%s, i32 %d)", p->name, p->body->end_line);
+        emit_unreachable();
+    }
 
     fclose(body);
     fclose(allocas);
-    fprintf(out, "define i32 @sift_main() {\n");
+    fprintf(out, "define %s %s(%s) {\n", llvm_type(p->ret.kind), function_name(p), params);
     fprintf(out, "entry:\n");
     fputs(allocas_text, out);
     fputs(body_text, out);
@@ -485,14 +561,20 @@ int codegen_program(Program *prog, FILE *output)
     fprintf(out, "declare void @sift_show_val(i32)\n");
     fprintf(out, "declare void @sift_show_flag(i1 zeroext)\n");
     fprintf(out, "declare void @sift_div_by_zero(i32) noreturn\n");
-    fprintf(out, "declare void @sift_mod_by_zero(i32) noreturn\n\n");
+    fprintf(out, "declare void @sift_mod_by_zero(i32) noreturn\n");
+    fprintf(out, "declare void @sift_missing_give_back(ptr, i32) noreturn\n\n");
 
+    /* each gives process's name as a C string, for the
+     * "ended without giving back a value" runtime error */
     for (int i = 0; i < prog->procs->count; i++) {
         Process *p = prog->procs->items[i];
-        if (p == sema_main(prog))
-            gen_main(p);
-        else
-            unsupported(p->line, "a process other than main");
+        if (p->ret.kind != TY_NONE)
+            fprintf(out, "@name.%s = private constant [%d x i8] c\"%s\\00\"\n",
+                    p->name, (int)strlen(p->name) + 1, p->name);
     }
+    fprintf(out, "\n");
+
+    for (int i = 0; i < prog->procs->count; i++)
+        gen_process(prog->procs->items[i]);
     return errors;
 }
