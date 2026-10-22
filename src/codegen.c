@@ -1,4 +1,3 @@
-/* Process code generation and function signatures */
 /*
  * codegen.c -- Phase 2: turns the checked AST into textual LLVM IR.
  *
@@ -178,7 +177,6 @@ static char *gen_expr(Expr *e);
 
 /* f(a, b): arguments are evaluated left to right, then the call.
  * Returns the result operand (NULL for a process without gives). */
-/* Process invocation and return handling */
 static char *gen_call(Expr *e)
 {
     Process *p = e->proc;
