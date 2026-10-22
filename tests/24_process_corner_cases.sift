@@ -1,0 +1,60 @@
+-- Processes whose names are also C library functions, many mixed
+-- parameters, deep recursion, and empty give back inside a loop.
+process printf using x: val gives val
+begin
+  give back x + 1;
+end
+
+process exit using code: val
+begin
+  show code;
+end
+
+process pick using a: val, use_a: flag, b: val, negate: flag gives val
+begin
+  declare r: val = b;
+  check use_a
+  begin
+    set r = a;
+  end
+  check negate
+  begin
+    set r = -r;
+  end
+  give back r;
+end
+
+process sum_to using n: val gives val
+begin
+  check n = 0
+  begin
+    give back 0;
+  end
+  give back n + sum_to(n - 1);
+end
+
+process count_until using limit: val
+begin
+  declare i: val = 0;
+  repeat while yes
+  begin
+    check i = limit
+    begin
+      show i;
+      give back;
+    end
+    set i = i + 1;
+  end
+end
+
+process main gives val
+begin
+  show printf(41);
+  exit(7);
+  show pick(1, yes, 2, no);
+  show pick(1, no, 2, yes);
+  show sum_to(10000);
+  count_until(4);
+  printf(0);
+  give back pick(3, yes, 0, no);
+end
