@@ -9,6 +9,7 @@
  * normally or a `give back` is unwinding out of the process.
  */
 #include <limits.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -383,9 +384,40 @@ static Value call_process(Frame *caller, Expr *call)
     return result;
 }
 
+/* The interpreter is recursive: every Sift call uses about 1 KB of the
+ * C stack (eval -> call_process -> exec_block -> ...). The normal 8 MB
+ * stack would overflow at a recursion depth of about 7000, so the program
+ * runs on a thread with a much bigger stack. The memory is only really
+ * used as the stack grows. */
+#define INTERP_STACK_SIZE ((size_t)1 << 30)    /* 1 GiB */
+
+typedef struct {
+    Program *prog;
+    int32_t result;
+} RunArgs;
+
+static void *run_main(void *arg)
+{
+    RunArgs *run = arg;
+    run->result = run_process(sema_main(run->prog), NULL).num;
+    return NULL;
+}
+
 int interp_run(Program *prog)
 {
-    Value result = run_process(sema_main(prog), NULL);
+    RunArgs run = { prog, 0 };
+    pthread_attr_t attr;
+    pthread_t thread;
+
+    pthread_attr_init(&attr);
+    if (pthread_attr_setstacksize(&attr, INTERP_STACK_SIZE) == 0 &&
+        pthread_create(&thread, &attr, run_main, &run) == 0) {
+        pthread_join(thread, NULL);
+    } else {
+        run_main(&run);    /* could not make the thread: use the normal stack */
+    }
+    pthread_attr_destroy(&attr);
+
     fflush(stdout);
-    return result.num;     /* main's result becomes the exit code */
+    return run.result;     /* main's result becomes the exit code */
 }
