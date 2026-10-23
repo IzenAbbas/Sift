@@ -1,0 +1,75 @@
+-- Buffers passed to, changed by, and given back from processes.
+process make using n: val, start: val gives buffer
+begin
+  declare b: buffer = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  check n < count b
+  begin
+    declare small: buffer = [0];
+    check n > 1
+    begin
+      give back copy_prefix(b, n, start);
+    end
+    set small[0] = start;
+    give back small;
+  end
+  give back b;
+end
+
+process copy_prefix using src: buffer, n: val, start: val gives buffer
+begin
+  declare out: buffer[3];
+  repeat i from 0 below n
+  begin
+    set out[i] = start + i;
+  end
+  give back out;
+end
+
+process reverse using d: buffer
+begin
+  declare lo: val = 0;
+  declare hi: val = count d - 1;
+  repeat while lo < hi
+  begin
+    declare t: val = d[lo];
+    set d[lo] = d[hi];
+    set d[hi] = t;
+    set lo = lo + 1;
+    set hi = hi - 1;
+  end
+end
+
+process swap_buffers using a: buffer, b: buffer gives val
+begin
+  -- set on a parameter only changes this process's copy of the reference
+  declare t: buffer = a;
+  set a = b;
+  set b = t;
+  give back a[0] * 10 + b[0];
+end
+
+process main gives val
+begin
+  declare x: buffer = make(1, 42);
+  show count x;
+  show x[0];
+  declare y: buffer = make(3, 7);
+  show y[0] + y[1] + y[2];
+  reverse(y);
+  sweep v in y
+  begin
+    show v;
+  end
+  declare p: buffer = [1];
+  declare q: buffer = [2];
+  show swap_buffers(p, q);
+  show p[0];
+  show count make(20, 0);
+  -- a list whose elements call processes
+  declare z: buffer = [count y, y[0] * 2, count make(1, 5)];
+  sweep v in z
+  begin
+    show v;
+  end
+  give back 0;
+end
