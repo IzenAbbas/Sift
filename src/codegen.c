@@ -1,3 +1,4 @@
+/* Buffer representation and heap allocation */
 /*
  * codegen.c -- Phase 2: turns the checked AST into textual LLVM IR.
  *
@@ -42,6 +43,7 @@ static Process *cur_proc;     /* process being generated */
 static int tmp_count;         /* last %tN used in the current function */
 static int label_count;       /* last LN used in the current function */
 static int terminated;        /* 1 right after a br/ret: a new block is needed */
+static char *cur_block;       /* label of the block being written ("entry", "L3") */
 static int errors;
 
 /* Labels to jump to for `skip` and `stop`, one pair per enclosing loop. */
@@ -86,6 +88,7 @@ static int new_label(void)
 static void start_block(int label)
 {
     fprintf(body, "L%d:\n", label);
+    cur_block = fmt("L%d", label);
     terminated = 0;
 }
 
@@ -159,6 +162,60 @@ static char *load_slot(int slot)
 static void store_slot(int slot, const char *value)
 {
     emit("store %s %s, ptr %s", llvm_type(slot_type(slot)), value, slot_name(slot));
+}
+
+/* ---------- buffers ----------
+ * A buffer is the LLVM struct  %buffer = type { ptr, i32 } : a pointer
+ * to the elements and the length. It is passed and stored as one value,
+ * so copying it copies only the pointer and length (reference semantics). */
+
+static char *buffer_data(const char *buf)
+{
+    char *r = new_tmp();
+    emit("%s = extractvalue %%buffer %s, 0", r, buf);
+    return r;
+}
+
+static char *buffer_length(const char *buf)
+{
+    char *r = new_tmp();
+    emit("%s = extractvalue %%buffer %s, 1", r, buf);
+    return r;
+}
+
+/* A new buffer of n elements (all 0), as a %buffer value. */
+static char *new_buffer(int n)
+{
+    char *data = new_tmp();
+    emit("%s = call ptr @sift_new_buffer(i32 %d)", data, n);
+    char *half = new_tmp();
+    emit("%s = insertvalue %%buffer poison, ptr %s, 0", half, data);
+    char *whole = new_tmp();
+    emit("%s = insertvalue %%buffer %s, i32 %d, 1", whole, half, n);
+    return whole;
+}
+
+/* Bounds check, then the address of element `index`:
+ *       br (index <u length), ok, error
+ *   error: call @sift_index_error(index, length, line); unreachable
+ *   ok:    p = getelementptr i32, ptr data, i32 index
+ * The unsigned compare (ult) also catches negative indexes, because a
+ * negative number seen as unsigned is huge. */
+static char *element_address(const char *buf, const char *index, int line)
+{
+    char *data = buffer_data(buf);
+    char *length = buffer_length(buf);
+    char *in_bounds = new_tmp();
+    emit("%s = icmp ult i32 %s, %s", in_bounds, index, length);
+    int ok = new_label(), error = new_label();
+    emit_cond_branch(in_bounds, ok, error);
+    start_block(error);
+    emit("call void @sift_index_error(i32 %s, i32 %s, i32 %d)", index, length, line);
+    emit_unreachable();
+    start_block(ok);
+    char *address = new_tmp();
+    emit("%s = getelementptr i32, ptr %s, i32 %s", address, data, index);
+    return address;
 }
 
 /* LLVM name of a process. The Sift `main` becomes @sift_main, which the
@@ -259,12 +316,42 @@ static const char *icmp_name(BinOp op)
     }
 }
 
+/* `and` / `or` with short-circuit evaluation. For  a and b :
+ *
+ *   A:     (code for a)  br a, rhs, end
+ *   rhs:   (code for b)  br end              (this block ends as B)
+ *   end:   r = phi i1 [ false, A ], [ b, B ]
+ *
+ * The phi picks its value by which block we arrived from: straight from
+ * A means a was false, so the answer is false without evaluating b.
+ * `or` is the same with the branches swapped and `true` from A. */
+static char *gen_logical(Expr *e)
+{
+    int is_and = e->op == OP_AND;
+    int rhs = new_label(), end = new_label();
+
+    char *a = gen_expr(e->left);
+    char *from_a = cur_block;
+    if (is_and)
+        emit_cond_branch(a, rhs, end);
+    else
+        emit_cond_branch(a, end, rhs);
+
+    start_block(rhs);
+    char *b = gen_expr(e->right);
+    char *from_b = cur_block;        /* b's code may have added blocks */
+    emit_branch(end);
+
+    start_block(end);
+    char *r = new_tmp();
+    emit("%s = phi i1 [ %s, %%%s ], [ %s, %%%s ]", r, is_and ? "false" : "true", from_a, b, from_b);
+    return r;
+}
+
 static char *gen_binary(Expr *e)
 {
-    if (e->op == OP_AND || e->op == OP_OR) {
-        unsupported(e->line, "'and'/'or'");
-        return "false";
-    }
+    if (e->op == OP_AND || e->op == OP_OR)
+        return gen_logical(e);
     char *a = gen_expr(e->left);      /* left operand first */
     char *b = gen_expr(e->right);
     switch (e->op) {
@@ -306,10 +393,36 @@ static char *gen_expr(Expr *e)
         return gen_binary(e);
     case EXPR_CALL:
         return gen_call(e);
-    default:
-        unsupported(e->line, "this expression");
-        return "0";
+    case EXPR_INDEX: {
+        char *buf = load_slot(e->slot);      /* the buffer, then the index */
+        char *index = gen_expr(e->left);
+        char *address = element_address(buf, index, e->line);
+        r = new_tmp();
+        emit("%s = load i32, ptr %s", r, address);
+        return r;
     }
+    case EXPR_COUNT:
+        return buffer_length(gen_expr(e->left));
+    case EXPR_ISVOID:
+        operand = gen_expr(e->left);
+        r = new_tmp();
+        emit("%s = icmp eq i32 %s, -2147483648", r, operand);
+        return r;
+    case EXPR_WITHIN: {
+        /* x within lo..hi  =  lo <= x and x <= hi, x computed once */
+        char *x = gen_expr(e->left);
+        char *lo = gen_expr(e->right);
+        char *hi = gen_expr(e->third);
+        char *above = new_tmp();
+        emit("%s = icmp sle i32 %s, %s", above, lo, x);
+        char *below = new_tmp();
+        emit("%s = icmp sle i32 %s, %s", below, x, hi);
+        r = new_tmp();
+        emit("%s = and i1 %s, %s", r, above, below);
+        return r;
+    }
+    }
+    return "0";
 }
 
 /* ---------- statements ---------- */
@@ -318,16 +431,30 @@ static void gen_block(Block *b);
 
 static void gen_declare(Stmt *s)
 {
-    const char *value;
-    if (s->value != NULL)
+    char *value;
+    if (s->list != NULL) {
+        /* [a, b, c]: evaluate the elements left to right, then make the
+         * buffer and store them one by one */
+        int n = s->list->count;
+        char **elements = xmalloc(n * sizeof(char *));
+        for (int i = 0; i < n; i++)
+            elements[i] = gen_expr(s->list->items[i]);
+        value = new_buffer(n);
+        char *data = buffer_data(value);
+        for (int i = 0; i < n; i++) {
+            char *address = new_tmp();
+            emit("%s = getelementptr i32, ptr %s, i32 %d", address, data, i);
+            emit("store i32 %s, ptr %s", elements[i], address);
+        }
+        free(elements);
+    } else if (s->value != NULL) {
         value = gen_expr(s->value);
-    else if (s->decl_type.kind == TY_FLAG)
+    } else if (s->decl_type.kind == TY_BUFFER) {
+        value = new_buffer(s->decl_type.size);
+    } else if (s->decl_type.kind == TY_FLAG) {
         value = "false";
-    else if (s->decl_type.kind == TY_VAL)
+    } else {
         value = "0";
-    else {
-        unsupported(s->line, "a buffer");
-        return;
     }
     store_slot(s->slot, value);
 }
@@ -433,6 +560,54 @@ static void gen_repeat(Stmt *s)
     start_block(exit);
 }
 
+/* sweep x in buf B:
+ *
+ *       data, length = buf         (read once)
+ *       k = 0                      (hidden index, its own alloca)
+ *       br head
+ *   head:  br (k < length), body, exit
+ *   body:  x = data[k];  B;  br latch   (skip -> latch, stop -> exit)
+ *   latch: k = k + 1;  br head
+ *   exit:
+ */
+static void gen_sweep(Stmt *s)
+{
+    int head = new_label(), loop_body = new_label(), latch = new_label(), exit = new_label();
+    char *buf = gen_expr(s->value);
+    char *data = buffer_data(buf);
+    char *length = buffer_length(buf);
+    char *k = fmt("%%k%d", head);              /* unique name for the hidden index */
+    fprintf(allocas, "  %s = alloca i32\n", k);
+    emit("store i32 0, ptr %s", k);
+    emit_branch(head);
+
+    start_block(head);
+    char *index = new_tmp();
+    emit("%s = load i32, ptr %s", index, k);
+    char *more = new_tmp();
+    emit("%s = icmp slt i32 %s, %s", more, index, length);
+    emit_cond_branch(more, loop_body, exit);
+
+    start_block(loop_body);
+    char *address = new_tmp();
+    emit("%s = getelementptr i32, ptr %s, i32 %s", address, data, index);
+    char *element = new_tmp();
+    emit("%s = load i32, ptr %s", element, address);
+    store_slot(s->slot, element);
+    gen_loop_body(s->body, latch, exit);
+    emit_branch(latch);
+
+    start_block(latch);
+    char *old = new_tmp();
+    emit("%s = load i32, ptr %s", old, k);
+    char *next = new_tmp();
+    emit("%s = add i32 %s, 1", next, old);
+    emit("store i32 %s, ptr %s", next, k);
+    emit_branch(head);
+
+    start_block(exit);
+}
+
 static void gen_stmt(Stmt *s)
 {
     switch (s->kind) {
@@ -440,10 +615,17 @@ static void gen_stmt(Stmt *s)
         gen_declare(s);
         break;
     case STMT_SET:
-        if (s->index != NULL)
-            unsupported(s->line, "indexing");
-        else
+        if (s->index != NULL) {
+            /* set d[i] = v : index, bounds check, then the value */
+            char *buf = load_slot(s->slot);
+            char *index = gen_expr(s->index);
+            char *address = element_address(buf, index, s->line);
+            char *value = gen_expr(s->value);
+            emit("store i32 %s, ptr %s", value, address);
+        } else {
+            /* for a buffer this stores the {pointer, length} pair */
             store_slot(s->slot, gen_expr(s->value));
+        }
         break;
     case STMT_CHECK:
         gen_check(s);
@@ -453,6 +635,9 @@ static void gen_stmt(Stmt *s)
         break;
     case STMT_REPEAT:
         gen_repeat(s);
+        break;
+    case STMT_SWEEP:
+        gen_sweep(s);
         break;
     case STMT_STOP:
         emit_branch(break_label[loop_depth - 1]);
@@ -508,6 +693,7 @@ static void gen_process(Process *p)
     tmp_count = 0;
     label_count = 0;
     terminated = 0;
+    cur_block = "entry";
     loop_depth = 0;
     body = open_memstream(&body_text, &body_size);
     allocas = open_memstream(&allocas_text, &allocas_size);
@@ -556,12 +742,16 @@ int codegen_program(Program *prog, FILE *output)
 
     fprintf(out, "; Generated by the Sift compiler from %s\n\n", g_filename);
 
+    fprintf(out, "%%buffer = type { ptr, i32 }    ; a buffer: elements, length\n\n");
+
     /* functions provided by runtime.c */
     fprintf(out, "declare void @sift_show_val(i32)\n");
     fprintf(out, "declare void @sift_show_flag(i1 zeroext)\n");
     fprintf(out, "declare void @sift_div_by_zero(i32) noreturn\n");
     fprintf(out, "declare void @sift_mod_by_zero(i32) noreturn\n");
-    fprintf(out, "declare void @sift_missing_give_back(ptr, i32) noreturn\n\n");
+    fprintf(out, "declare void @sift_index_error(i32, i32, i32) noreturn\n");
+    fprintf(out, "declare void @sift_missing_give_back(ptr, i32) noreturn\n");
+    fprintf(out, "declare ptr @sift_new_buffer(i32)\n\n");
 
     /* each gives process's name as a C string, for the
      * "ended without giving back a value" runtime error */
