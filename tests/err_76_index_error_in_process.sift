@@ -1,0 +1,16 @@
+process get using d: buffer, i: val gives val
+begin
+  give back d[i];
+end
+
+process main gives val
+begin
+  declare d: buffer[5];
+  sweep x in d
+  begin
+    show x;
+  end
+  show get(d, 4);
+  show get(d, 5);
+  give back 0;
+end

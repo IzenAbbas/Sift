@@ -201,6 +201,7 @@ static char *new_buffer(int n)
  *   ok:    p = getelementptr i32, ptr data, i32 index
  * The unsigned compare (ult) also catches negative indexes, because a
  * negative number seen as unsigned is huge. */
+/* Buffer indexing with bounds checking */
 static char *element_address(const char *buf, const char *index, int line)
 {
     char *data = buffer_data(buf);
