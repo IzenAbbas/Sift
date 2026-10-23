@@ -1,4 +1,3 @@
-/* Buffer representation and heap allocation */
 /*
  * codegen.c -- Phase 2: turns the checked AST into textual LLVM IR.
  *
@@ -201,7 +200,6 @@ static char *new_buffer(int n)
  *   ok:    p = getelementptr i32, ptr data, i32 index
  * The unsigned compare (ult) also catches negative indexes, because a
  * negative number seen as unsigned is huge. */
-/* Buffer indexing with bounds checking */
 static char *element_address(const char *buf, const char *index, int line)
 {
     char *data = buffer_data(buf);
@@ -409,7 +407,6 @@ static char *gen_expr(Expr *e)
         r = new_tmp();
         emit("%s = icmp eq i32 %s, -2147483648", r, operand);
         return r;
-    /* Within and void sentinel evaluation */
     case EXPR_WITHIN: {
         /* x within lo..hi  =  lo <= x and x <= hi, x computed once */
         char *x = gen_expr(e->left);
@@ -572,7 +569,6 @@ static void gen_repeat(Stmt *s)
  *   latch: k = k + 1;  br head
  *   exit:
  */
-/* Buffer sweep iteration loop */
 static void gen_sweep(Stmt *s)
 {
     int head = new_label(), loop_body = new_label(), latch = new_label(), exit = new_label();

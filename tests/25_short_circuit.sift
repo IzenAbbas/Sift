@@ -1,0 +1,31 @@
+-- and / or only evaluate the right side when they need to.
+process say using n: val, result: flag gives flag
+begin
+  show n;
+  give back result;
+end
+
+process main gives val
+begin
+  show say(1, no) and say(2, yes);
+  show say(3, yes) and say(4, no);
+  show say(5, yes) or say(6, no);
+  show say(7, no) or say(8, yes);
+  -- nested: the right side itself contains and/or (more blocks)
+  show say(9, yes) and (say(10, no) or say(11, yes)) and not say(12, no);
+  -- a guard protects the index
+  declare d: buffer = [4, -1, 6];
+  declare i: val = 5;
+  show i < count d and d[i] > 0;
+  set i = 1;
+  show i < count d and d[i] > 0;
+  show i >= count d or d[i] < 0;
+  -- and/or inside loop conditions
+  declare n: val = 0;
+  repeat while n < 10 and not (n * n > 20 or n = 7)
+  begin
+    set n = n + 1;
+  end
+  show n;
+  give back 0;
+end
