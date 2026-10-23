@@ -409,6 +409,7 @@ static char *gen_expr(Expr *e)
         r = new_tmp();
         emit("%s = icmp eq i32 %s, -2147483648", r, operand);
         return r;
+    /* Within and void sentinel evaluation */
     case EXPR_WITHIN: {
         /* x within lo..hi  =  lo <= x and x <= hi, x computed once */
         char *x = gen_expr(e->left);
