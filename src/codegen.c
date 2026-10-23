@@ -571,6 +571,7 @@ static void gen_repeat(Stmt *s)
  *   latch: k = k + 1;  br head
  *   exit:
  */
+/* Buffer sweep iteration loop */
 static void gen_sweep(Stmt *s)
 {
     int head = new_label(), loop_body = new_label(), latch = new_label(), exit = new_label();
