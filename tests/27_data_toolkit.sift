@@ -1,0 +1,137 @@
+-- A larger program that mixes every feature: a small data-cleaning
+-- toolkit (sieve, statistics, median filter, clipping, pipelines).
+
+process primes_below using n: val gives buffer
+begin
+  declare is_composite: buffer[50];
+  declare found: buffer[50];
+  declare count_found: val = 0;
+  repeat i from 2 below n
+  begin
+    check is_composite[i] = 1
+    begin
+      skip;
+    end
+    set found[count_found] = i;
+    set count_found = count_found + 1;
+    declare j: val = i * i;
+    repeat while j < n
+    begin
+      set is_composite[j] = 1;
+      set j = j + i;
+    end
+  end
+  declare result: buffer[50];
+  repeat k from 0 below count_found
+  begin
+    set result[k] = found[k];
+  end
+  -- unused slots are marked missing
+  repeat k from count_found below count result
+  begin
+    set result[k] = void;
+  end
+  give back result;
+end
+
+process count_present using d: buffer gives val
+begin
+  declare c: val = 0;
+  sweep x in d
+  begin
+    check not (x is void)
+    begin
+      set c = c + 1;
+    end
+  end
+  give back c;
+end
+
+process max_of using d: buffer gives val
+begin
+  declare best: val = void;
+  sweep x in d
+  begin
+    check x is void
+    begin
+      skip;
+    end
+    check best is void or x > best
+    begin
+      set best = x;
+    end
+  end
+  give back best;
+end
+
+-- median of three values
+process median3 using a: val, b: val, c: val gives val
+begin
+  check (a <= b and b <= c) or (c <= b and b <= a)
+  begin
+    give back b;
+  end
+  else check (b <= a and a <= c) or (c <= a and a <= b)
+  begin
+    give back a;
+  end
+  otherwise
+  begin
+    give back c;
+  end
+end
+
+-- 3-point median filter; the ends are copied unchanged
+process median_filter using d: buffer gives buffer
+begin
+  declare out: buffer[12];
+  set out[0] = d[0];
+  set out[count d - 1] = d[count d - 1];
+  repeat i from 1 below count d - 1
+  begin
+    set out[i] = median3(d[i - 1], d[i], d[i + 1]);
+  end
+  give back out;
+end
+
+process clip using d: buffer, lo: val, hi: val gives buffer
+begin
+  repeat i from 0 below count d
+  begin
+    check d[i] < lo
+    begin
+      set d[i] = lo;
+    end
+    else check d[i] > hi
+    begin
+      set d[i] = hi;
+    end
+  end
+  give back d;
+end
+
+process show_all using d: buffer
+begin
+  sweep x in d
+  begin
+    check x is void
+    begin
+      stop;
+    end
+    show x;
+  end
+end
+
+process main gives val
+begin
+  declare p: buffer = primes_below(50);
+  show count_present(p);
+  show max_of(p);
+  show_all(p);
+
+  declare noisy: buffer[12] = [5, 6, 90, 7, 8, -40, 9, 10, 11, 200, 12, 13];
+  declare smooth: buffer = noisy |> median_filter |> clip(0, 12);
+  show_all(smooth);
+  show smooth |> max_of;
+  give back count_present(p) % 7;
+end
