@@ -51,13 +51,6 @@ static int continue_label[MAX_LOOP_DEPTH];
 static int break_label[MAX_LOOP_DEPTH];
 static int loop_depth;
 
-/* Report a feature the code generator cannot handle yet. */
-static void unsupported(int line, const char *what)
-{
-    report_error(line, "%s is not supported by the compiler yet", what);
-    errors++;
-}
-
 /* A string built with printf-style formatting (never freed: the
  * compiler is short-lived). */
 static char *fmt(const char *format, ...)
@@ -661,9 +654,6 @@ static void gen_stmt(Stmt *s)
         break;
     case STMT_CALL:
         gen_call(s->value);       /* a result, if any, is not used */
-        break;
-    default:
-        unsupported(s->line, "this statement");
         break;
     }
 }
