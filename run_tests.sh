@@ -1,4 +1,3 @@
-# Enforce run and compile parity
 #!/bin/bash
 # run_tests.sh -- runs every test in tests/ and prints PASS/FAIL for each.
 #
