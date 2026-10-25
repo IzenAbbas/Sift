@@ -6,9 +6,9 @@
  * slots), so a variable is found by its slot number, not by its name.
  *
  * Statements return a Flow value that says whether execution continues
- * normally or a `give back` is unwinding out of the process.
+ * normally, or a `stop` / `skip` / `give back` is on its way out to the
+ * enclosing loop or process.
  */
-#include <limits.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <stdint.h>
