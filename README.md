@@ -482,3 +482,65 @@ Variables live in `alloca` stack slots (`opt -O2` turns them into registers). Th
 becomes `@sift_main`, which the C `main` in the runtime calls; other processes are named
 `@sift.NAME`.
 
+# 5. Every file in the project
+
+| File | What it does |
+|---|---|
+| `Makefile` | builds `./sift` and `build/sift_runtime.o`; `make test`, `make clean` |
+| `run_tests.sh` | runs all tests in both modes, prints PASS/FAIL and a summary |
+| `README.md` / `README.pdf` | this document (the PDF is made with `pandoc README.md -o README.pdf`) |
+| `.gitignore` | keeps build outputs, compiled programs and `snapshots/` out of git |
+| `docs/EXPLANATION.md` | plain-language guide to how the compiler works, for the viva |
+| `docs/Sift_Proposal_Group6.pdf` | the original project proposal |
+| `src/lexer.l` | Flex specification: keywords, identifiers, integers, operators, comments, line numbers |
+| `src/lexer.h` | declarations for using the lexer (`yylex`, `yylineno`, `token_name`) |
+| `src/parser.y` | Bison grammar with precedence declarations; its actions build the AST and desugar the pipeline |
+| `src/ast.h`, `src/ast.c` | AST node types, constructors, pipeline desugaring, and the `./sift ast` printer |
+| `src/sema.h`, `src/sema.c` | semantic analysis: scopes and symbol tables, type checking, all semantic rules, variable slot numbers |
+| `src/interp.h`, `src/interp.c` | Phase 1: tree-walking interpreter and runtime errors |
+| `src/codegen.h`, `src/codegen.c` | Phase 2: walks the AST and prints textual LLVM IR |
+| `src/runtime.c` | C runtime linked into compiled programs: `show`, runtime errors, buffer storage, C `main` |
+| `src/main.c` | command-line driver: `run`, `compile` (calls `opt`, `llc`, `clang`), `tokens`, `ast` |
+| `src/util.h`, `src/util.c` | error reporting, checked `malloc`, a growable list type |
+| `examples/cleaning.sift` | the full cleaning pipeline from the proposal |
+| `examples/sort.sift` | insertion sort from the proposal, with a `main` |
+| `tests/` | 109 test programs (see section 3) and their expected output |
+
+Files created by the build (not part of the source): `sift`, `build/` (generated `parser.c`,
+`parser.h`, `lexer.c`, object files and `sift_runtime.o`).
+
+# 6. Design decisions and known limitations
+
+- **No floating point.** `val` is a 32-bit signed integer; the mean in the cleaning example is an
+  integer mean (149 / 5 = 29).
+- **`void` is a sentinel.** A missing value is stored as -2147483648 (`INT_MIN`), so that number
+  cannot be used as real data: `show` prints it as `void` and `is void` is true for it. Arithmetic
+  on `void` is not checked. An integer literal must fit in 0 .. 2147483647 (negative numbers come
+  from unary minus).
+- **Integer overflow wraps around** (two's complement) in both modes. `INT_MIN / -1` gives
+  `INT_MIN` and `INT_MIN % -1` gives 0 instead of crashing.
+- **Buffers** are never freed (programs are short-lived), so a process can give back a buffer it
+  declared. A buffer must have at least one element. A sized declaration (`buffer[N]`) can only be
+  initialised with a list; `declare d: buffer = other;` shares `other`.
+- **Scopes:** every `begin ... end` block is a scope. Parameters share the scope of the top level of
+  the process body, so the body cannot redeclare a parameter. A loop variable is in its own scope
+  around the loop body. A declaration's initial value is evaluated before the new name exists.
+- **Evaluation order** is left to right everywhere (operands, arguments, list elements). For
+  `set d[i] = v` the index is evaluated and bounds-checked before `v`.
+- **"Must end with give back"** is checked conservatively, as specified: the last statement must be
+  `give back`, or a `check ... otherwise` in which every branch ends that way. So a `gives` process
+  cannot end with a loop, even an endless one.
+- **Exit codes** are taken modulo 256 by Linux (main giving back 300 exits with 44).
+- **Deep recursion:** the interpreter runs on a thread with a 1 GiB stack (tested to a recursion
+  depth of 200000). Extremely deep recursion can still overflow the stack, in either mode, without a
+  friendly message.
+- **Syntax errors** are Bison's messages (e.g. `syntax error, unexpected give`); only the first one
+  is reported.
+- **The grammar** uses Bison precedence declarations, so it also accepts `not not x`, `- -x` and
+  `a |> f > 0` (meaning `f(a) > 0`); all of these are still type-checked.
+- **LLVM IR** uses opaque pointers (`ptr`), so a buffer is `{ ptr, i32 }`; LLVM 15+ is required.
+  Runtime checks in compiled code are an inline compare and a branch to an error block that calls a
+  `noreturn` runtime function, so the division or memory access is only reached when it is safe.
+- **Compiled programs** need `build/sift_runtime.o`, which `./sift` finds next to itself
+  (`SIFT_RUNTIME=path` overrides this). Temporary `.ll` and `.o` files go in `/tmp/sift-XXXXXX` and
+  are deleted afterwards.
